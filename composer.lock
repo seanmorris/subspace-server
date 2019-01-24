@@ -1,0 +1,403 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
+        "This file is @generated automatically"
+    ],
+    "hash": "60d8370f173c7f647eb4d199c54ef966",
+    "content-hash": "229bad4376f23435a319bb658be10342",
+    "packages": [
+        {
+            "name": "hautelook/phpass",
+            "version": "1.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/hautelook/phpass.git",
+                "reference": "b2daca28508000d1dd126e93ec472d771626a774"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/hautelook/phpass/zipball/b2daca28508000d1dd126e93ec472d771626a774",
+                "reference": "b2daca28508000d1dd126e93ec472d771626a774",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.6.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "Hautelook": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Public Domain"
+            ],
+            "authors": [
+                {
+                    "name": "Solar Designer",
+                    "email": "solar@openwall.com",
+                    "homepage": "http://openwall.com/phpass/"
+                }
+            ],
+            "description": "Portable PHP password hashing framework",
+            "homepage": "http://github.com/hautelook/phpass/",
+            "keywords": [
+                "blowfish",
+                "crypt",
+                "password",
+                "security"
+            ],
+            "time": "2012-08-31 00:00:00"
+        },
+        {
+            "name": "seanmorris/access",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/seanmorris/access.git",
+                "reference": "0b509b9a9b213dda045d1c2e5974af2c74a0046b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/seanmorris/access/zipball/0b509b9a9b213dda045d1c2e5974af2c74a0046b",
+                "reference": "0b509b9a9b213dda045d1c2e5974af2c74a0046b",
+                "shasum": ""
+            },
+            "require": {
+                "hautelook/phpass": "^1.0"
+            },
+            "require-dev": {
+                "simpletest/simpletest": "^1.1"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "SeanMorris\\Access\\Test\\": "test/",
+                    "SeanMorris\\Access\\": "source/",
+                    "seanmorris\\access\\": "source/"
+                }
+            },
+            "authors": [
+                {
+                    "name": "Sean Morris",
+                    "email": "sean@sean-morris.com"
+                }
+            ],
+            "support": {
+                "source": "https://github.com/seanmorris/access/tree/master",
+                "issues": "https://github.com/seanmorris/access/issues"
+            },
+            "time": "2018-12-13 00:49:52"
+        },
+        {
+            "name": "seanmorris/form",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/seanmorris/form.git",
+                "reference": "1501aba6b50fb75b8605fc4afd986449b4c29fe9"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/seanmorris/form/zipball/1501aba6b50fb75b8605fc4afd986449b4c29fe9",
+                "reference": "1501aba6b50fb75b8605fc4afd986449b4c29fe9",
+                "shasum": ""
+            },
+            "require": {
+                "seanmorris/theme": "1.0.*"
+            },
+            "require-dev": {
+                "simpletest/simpletest": "^1.1"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "SeanMorris\\Form\\Test\\": "test/",
+                    "SeanMorris\\Form\\": "source/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Sean Morris",
+                    "email": "sean@sean-morris.com"
+                }
+            ],
+            "description": "Simple, Object oriented forms for PHP.",
+            "time": "2018-12-09 04:27:18"
+        },
+        {
+            "name": "seanmorris/ids",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/seanmorris/ids.git",
+                "reference": "f7ab5f65783423afb02c4b333c4d4b8a9dcfc6b7"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/seanmorris/ids/zipball/f7ab5f65783423afb02c4b333c4d4b8a9dcfc6b7",
+                "reference": "f7ab5f65783423afb02c4b333c4d4b8a9dcfc6b7",
+                "shasum": ""
+            },
+            "require-dev": {
+                "simpletest/simpletest": "dev-master"
+            },
+            "bin": [
+                "source/Idilic/idilic"
+            ],
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "SeanMorris\\Ids\\Test\\": "test/",
+                    "SeanMorris\\Ids\\": "source/"
+                }
+            },
+            "authors": [
+                {
+                    "name": "Sean Morris",
+                    "email": "sean@sean-morris.com"
+                }
+            ],
+            "support": {
+                "source": "https://github.com/seanmorris/ids/tree/master",
+                "issues": "https://github.com/seanmorris/ids/issues"
+            },
+            "time": "2018-12-12 21:01:08"
+        },
+        {
+            "name": "seanmorris/kalisti",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/seanmorris/kalisti.git",
+                "reference": "a95a5c408221a965b8acbefcbf7f411393ac6a6c"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/seanmorris/kalisti/zipball/a95a5c408221a965b8acbefcbf7f411393ac6a6c",
+                "reference": "a95a5c408221a965b8acbefcbf7f411393ac6a6c",
+                "shasum": ""
+            },
+            "require-dev": {
+                "simpletest/simpletest": "dev-master"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "SeanMorris\\Kalisti\\Test\\": "test/",
+                    "SeanMorris\\Kalisti\\": "source/"
+                }
+            },
+            "authors": [
+                {
+                    "name": "Sean Morris",
+                    "email": "inquire@seanmorr.is"
+                }
+            ],
+            "description": "Channel based messaging interface",
+            "support": {
+                "source": "https://github.com/seanmorris/kalisti/tree/master",
+                "issues": "https://github.com/seanmorris/kalisti/issues"
+            },
+            "time": "2018-12-14 15:52:35"
+        },
+        {
+            "name": "seanmorris/message",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/seanmorris/message.git",
+                "reference": "73c1b67f72dedba14c572e6e80c2c4fdd7ac8d3e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/seanmorris/message/zipball/73c1b67f72dedba14c572e6e80c2c4fdd7ac8d3e",
+                "reference": "73c1b67f72dedba14c572e6e80c2c4fdd7ac8d3e",
+                "shasum": ""
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "SeanMorris\\Message\\Test\\": "test/",
+                    "SeanMorris\\Message\\": "source/"
+                }
+            },
+            "authors": [
+                {
+                    "name": "Sean Morris",
+                    "email": "sean@sean-morris.com"
+                }
+            ],
+            "support": {
+                "source": "https://github.com/seanmorris/message/tree/master",
+                "issues": "https://github.com/seanmorris/message/issues"
+            },
+            "time": "2018-05-07 18:57:24"
+        },
+        {
+            "name": "seanmorris/presskit",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/seanmorris/PressKit.git",
+                "reference": "7dd622f93909289135923677bc9c82b25133a166"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/seanmorris/PressKit/zipball/7dd622f93909289135923677bc9c82b25133a166",
+                "reference": "7dd622f93909289135923677bc9c82b25133a166",
+                "shasum": ""
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "SeanMorris\\PressKit\\Test\\": "test/",
+                    "SeanMorris\\PressKit\\": "source/"
+                }
+            },
+            "authors": [
+                {
+                    "name": "Sean Morris",
+                    "email": "sean@sean-morris.com"
+                }
+            ],
+            "support": {
+                "source": "https://github.com/seanmorris/PressKit/tree/master",
+                "issues": "https://github.com/seanmorris/PressKit/issues"
+            },
+            "time": "2018-12-12 21:01:29"
+        },
+        {
+            "name": "seanmorris/theme",
+            "version": "1.0.7",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/seanmorris/theme.git",
+                "reference": "97554e153312026c7db4af8ae3653d20fe9d117d"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/seanmorris/theme/zipball/97554e153312026c7db4af8ae3653d20fe9d117d",
+                "reference": "97554e153312026c7db4af8ae3653d20fe9d117d",
+                "shasum": ""
+            },
+            "require-dev": {
+                "simpletest/simpletest": "dev-master"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "SeanMorris\\Theme\\Test\\": "test/",
+                    "SeanMorris\\Theme\\": "source/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Sean Morris",
+                    "email": "sean@sean-morris.com"
+                }
+            ],
+            "description": "Simple, sane templating and theming for PHP",
+            "time": "2017-07-02 12:52:16"
+        }
+    ],
+    "packages-dev": [
+        {
+            "name": "simpletest/simpletest",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/simpletest/simpletest.git",
+                "reference": "713ffea002c8a99adae899e7c27ec201d760f1e3"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/simpletest/simpletest/zipball/713ffea002c8a99adae899e7c27ec201d760f1e3",
+                "reference": "713ffea002c8a99adae899e7c27ec201d760f1e3",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^5.4 || ^7.0"
+            },
+            "type": "library",
+            "autoload": {
+                "classmap": [
+                    "."
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "LGPL-2.0+"
+            ],
+            "authors": [
+                {
+                    "name": "Lars Vierbergen",
+                    "email": "vierbergenlars@gmail.com"
+                },
+                {
+                    "name": "Lachlan Donald",
+                    "email": "lachlan@ljd.cc"
+                },
+                {
+                    "name": "Marcus Baker",
+                    "email": "marcus@lastcraft.com",
+                    "role": "Original project lead"
+                },
+                {
+                    "name": "Jason Sweat",
+                    "role": "Original developer"
+                },
+                {
+                    "name": "Travis Swicegood",
+                    "role": "Original developer"
+                },
+                {
+                    "name": "Perrick Penet",
+                    "role": "Original developer"
+                },
+                {
+                    "name": "Edward Z. Yang",
+                    "role": "Original developer"
+                },
+                {
+                    "name": "Jens A. Koch"
+                }
+            ],
+            "description": "Unit testing, mock objects and web testing framework for PHP built around test cases.",
+            "homepage": "http://simpletest.org/",
+            "keywords": [
+                "SimpleTest",
+                "code-coverage",
+                "selenium",
+                "testing",
+                "unit-test"
+            ],
+            "time": "2017-09-01 07:28:43"
+        }
+    ],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": {
+        "seanmorris/ids": 20,
+        "seanmorris/access": 20,
+        "seanmorris/form": 20,
+        "seanmorris/message": 20,
+        "seanmorris/presskit": 20,
+        "seanmorris/kalisti": 20,
+        "simpletest/simpletest": 20
+    },
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": [],
+    "platform-dev": []
+}

@@ -1,0 +1,49 @@
+{
+    "name": "SeanMorris/SubSpace",
+    "description": "Kalisti websocket server.",
+    "authors": [
+        {
+            "name": "Sean Morris",
+            "email": "contact@seanmorr.is"
+        }
+    ],
+    "require": {
+        "seanmorris/ids": "dev-master",
+        "seanmorris/access": "dev-master",
+        "seanmorris/form": "dev-master",
+        "seanmorris/message": "dev-master",
+        "seanmorris/presskit": "dev-master",
+        "seanmorris/kalisti": "dev-master"
+    },
+    "require-dev": {
+        "simpletest/simpletest": "dev-master"
+    },
+    "autoload": {
+		"psr-4": {
+			"SeanMorris\\SubSpace\\Test\\": "test/",
+			"SeanMorris\\SubSpace\\": "source/"
+		}
+	},
+	"repositories": [
+        {   
+            "type": "vcs",
+            "url":  "git@github.com:seanmorris/ids.git"
+        },
+        {   
+            "type": "vcs",
+            "url": "git@github.com:seanmorris/presskit.git"
+        },
+        {   
+            "type": "vcs",
+            "url": "git@github.com:seanmorris/message.git"
+        },
+        {   
+            "type": "vcs",
+            "url": "git@github.com:seanmorris/access.git"
+        },
+        {   
+            "type": "vcs",
+            "url": "git@github.com:seanmorris/kalisti.git"
+        }
+    ]
+}
