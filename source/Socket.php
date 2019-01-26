@@ -2,6 +2,7 @@
 namespace SeanMorris\SubSpace;
 class Socket
 {
+	protected $socket, $clients, $partials, $types, $multiframes, $leftovers;
 	const
 		MAX              = 1
 		, FREQUENCY      = 120
@@ -16,6 +17,10 @@ class Socket
 
 	public function __construct()
 	{
+		// $this->hub = new \SeanMorris\Kalisti\Hub;	
+		// $this->localAgent = new \SeanMorris\Kalisti\Agent;
+		// $this->localAgent->register($this->hub);
+
 		$keyFile    = '/etc/letsencrypt/live/example.com/privkey.pem';
 		$chainFile  = '/etc/letsencrypt/live/example.com/chain.pem';
 
@@ -42,7 +47,11 @@ class Socket
 			, $context
 		);
 
-		$this->clients = [];
+		$this->clients     = [];
+		$this->partials    = [];
+		$this->types       = [];
+		$this->multiframes = [];
+		$this->leftovers   = [];
 	}
 
 	public function tick()
@@ -89,8 +98,6 @@ class Socket
 
 		// Get data from clients
 
-		$messages = [];
-
 		foreach($this->clients as $i => $client)
 		{
 			if(!$client)
@@ -98,31 +105,242 @@ class Socket
 				continue;
 			}
 
-			while($message = fread($client, 2**16))
+			$decoded = '';
+
+			while(($rawBytes = fread($client, 2**16)) || isset($this->leftovers[$i]))
 			{
-				$type = $this->dataType($message);
-
-				switch($type)
+				if(isset($this->leftovers[$i]))
 				{
-					case(static::MESSAGE_TYPES['text']):
-					case(static::MESSAGE_TYPES['binary']):
-						$this->onReceive($message, $client, $i);
-						break;
-					case(static::MESSAGE_TYPES['close']):
-						if($client)
+					$rawBytes = $this->leftovers[$i] . $rawBytes;
+					$this->leftovers[$i] = NULL;
+				}
+
+				while($rawBytes)
+				{
+					\SeanMorris\Ids\Log::debug('Got message');
+
+					if(isset($this->partials[$i]))
+					{
+						\SeanMorris\Ids\Log::debug('Resuming deferred message...');
+
+						list($type, $data, $masks, $fin, $length) = $this->partials[$i];
+
+						$remaining = $length - strlen($data);
+
+						$append   = substr($rawBytes, 0, $remaining);
+						$rawBytes = substr($rawBytes, $remaining);
+
+						$data .= $append;
+
+						$remaining = $length - strlen($data);
+						
+						\SeanMorris\Ids\Log::debug(sprintf(
+							'Appending %d bytes, %d/%d remaining...'
+							, strlen($append)
+							, $remaining
+							, $length
+						));
+
+						if(isset($this->multiframes[$i]))
 						{
-							$this->onDisconnect($client, $i);
+							$decoded = $this->multiframes[$i];
+						}
 
-							unset( $this->clients[$i] );
+						if($remaining <= 0)
+						{
+							\SeanMorris\Ids\Log::debug(sprintf(
+								'Decoding...'
+							));
 
-							fclose($client);
+							for ($ii = 0; $ii < $length; ++$ii)
+							{
+								if(!isset($data[$ii]))
+								{
+									\SeanMorris\Ids\Log::debug(sprintf(
+										'Deferring...'
+									));
+									$this->partials[$i] = [
+										$type, $data, $masks, $fin, $length
+									];
+									return FALSE;
+								}
+
+								$decoded .= $data[$ii] ^ $masks[$ii%4];
+							}
+
+							$this->partials[$i] = NULL;
+
+							if(!$fin && $rawBytes)
+							{
+								if(!isset($this->multiframes[$i]))
+								{
+									$this->multiframes[$i] = '';
+								}
+
+								$this->multiframes[$i] = $decoded;
+
+								if($rawBytes)
+								{
+									$this->leftovers[$i] = $rawBytes;
+									continue 3;
+								}
+								\SeanMorris\Ids\Log::debug(sprintf(
+									'Waiting for next few bytes...'
+								));
+								continue 3;
+							}
+
+							\SeanMorris\Ids\Log::debug(sprintf(
+								'Decoding complete. Got %d bytes.'
+								, strlen($decoded)
+							), $this->types[$i]);
+
+							$this->onReceive(
+								$this->types[$i]
+								, $decoded
+								, $client
+								, $i
+							);
+
+							$this->multiframes[$i] = $decoded = '';
+						}
+						else
+						{
+							$this->partials[$i] = [
+								$type, $data, $masks, $fin, $length
+							];
+						}
+
+						return FALSE;
+					}
+
+					$fin  = $this->fin($rawBytes);
+					$type = $this->dataType($rawBytes);
+
+					if($type)
+					{
+						$this->types[$i] = $type;
+					}
+
+					\SeanMorris\Ids\Log::debug('Type', $type);
+
+					switch($type)
+					{
+						case(static::MESSAGE_TYPES['ping']):
+							fwrite(STDERR, 'Received a ping!');
+							break;
+						case(static::MESSAGE_TYPES['pong']):
+							fwrite(STDERR, 'Received a pong!');
+							break;
+						case(static::MESSAGE_TYPES['continuous']):
+							if(isset($this->multiframes[$i]))
+							{
+								$decoded = $this->multiframes[$i];
+							}
+						case(static::MESSAGE_TYPES['text']):
+						case(static::MESSAGE_TYPES['binary']):
+							$length = ord($rawBytes[1]) & 127;
+
+							if($length == 126)
+							{
+								$length = unpack('n', substr($rawBytes, 2, 2))[1];
+								$masks = substr($rawBytes, 4, 4);
+								$data = substr($rawBytes, 8);
+								\SeanMorris\Ids\Log::debug(sprintf(
+									'Message length %d, bytes got %d.'
+									, $length
+									, strlen($data)
+								));
+							}
+							else if($length == 127)
+							{
+								$length = unpack('J', substr($rawBytes, 2, 8))[1];
+								$masks = substr($rawBytes, 10, 4);
+								$data = substr($rawBytes, 14);
+								\SeanMorris\Ids\Log::debug(sprintf(
+									'Message length %d, bytes got %d.'
+									, $length
+									, strlen($data)
+								));
+							}
+							else
+							{
+								$masks = substr($rawBytes, 2, 4);
+								$data = substr($rawBytes, 6);
+								\SeanMorris\Ids\Log::debug(sprintf(
+									'Message length %d, bytes got %d.'
+									, $length
+									, strlen($data)
+								));
+							}
+
+							for ($ii = 0; $ii < $length; ++$ii)
+							{
+								if(!isset($data[$ii]))
+								{
+									\SeanMorris\Ids\Log::debug(sprintf(
+										'Deferring...'
+									));
+									$this->partials[$i] = [
+										$type, $data, $masks, $fin, $length
+									];
+									return FALSE;
+								}
+
+								$decoded .= $data[$ii] ^ $masks[$ii%4];
+							}
+
+							if(!$fin)
+							{
+								if(!isset($this->multiframes[$i]))
+								{
+									$this->multiframes[$i] = '';
+								}
+
+								$this->multiframes[$i] .= $decoded;
+								continue 4;
+							}
+
+							$this->onReceive($type, $decoded, $client, $i);
+
+							$this->partials[$i] = NULL;
+
+							$this->multiframes[$i] = $decoded = '';
+
+							if($rawBytes = substr($data, $length))
+							{
+								$this->leftovers[$i] = $rawBytes;
+								continue 4;
+							}
+
+							break;
+						case(static::MESSAGE_TYPES['close']):
+							if($client)
+							{
+								$this->onDisconnect($client, $i);
+
+								unset( $this->clients[$i] );
+
+								fclose($client);
+
+							}
+							return FALSE;
+							break;
+						default:
+							\SeanMorris\Ids\Log::debug('Rejecting...');
+							if($client)
+							{
+								$this->onDisconnect($client, $i);
+
+								unset( $this->clients[$i] );
+
+								fclose($client);
+							}
 
 							return FALSE;
-						}
-						break;
-					// case(static::MESSAGE_TYPES['ping']):
-					// case(static::MESSAGE_TYPES['pong']):
-						break;
+							break;
+					}
+
 				}
 			}
 		}
@@ -154,68 +372,29 @@ class Socket
 
 		if(get_resource_type($client) == 'stream')
 		{
+			stream_set_blocking($client, TRUE);
+
 			fwrite($client, $encoded);
+
+			stream_set_blocking($client, FALSE);
 		}
 	}
 
-	protected function decode($message)
+	protected function fin($message)
 	{
-		if($message === FALSE)
+		$type = ord($message[0]);
+
+		if($type >= 128)
 		{
-			return;
+			return true;
 		}
-
-		$type = $this->dataType($message);
-
-		$return = FALSE;
-
-		switch($type)
-		{
-			case(static::MESSAGE_TYPES['close']):
-				break;
-			case(static::MESSAGE_TYPES['text']):
-			case(static::MESSAGE_TYPES['binary']):
-				$length = ord($message[1]) & 127;
-
-				if($length == 126)
-				{
-					$masks = substr($message, 4, 4);
-					$data = substr($message, 8);
-				}
-				else if($length == 127)
-				{
-					$masks = substr($message, 10, 4);
-					$data = substr($message, 14);
-				}
-				else
-				{
-					$masks = substr($message, 2, 4);
-					$data = substr($message, 6);
-				}
-
-				$return = '';
-
-				for ($i = 0; $i < strlen($data); ++$i)
-				{
-					$return .= $data[$i] ^ $masks[$i%4];
-				}
-				break;
-			case(static::MESSAGE_TYPES['ping']):
-				fwrite(STDERR, 'Received a ping!');
-				break;
-			case(static::MESSAGE_TYPES['pong']):
-				fwrite(STDERR, 'Received a pong!');
-				break;
-		}
-
-		return $return;
 	}
 
 	protected function dataType($message)
 	{
 		$type = ord($message[0]);
 
-		if($type > 128)
+		if($type >= 128)
 		{
 			$type -= 128;
 		}
@@ -240,15 +419,13 @@ class Socket
 		fwrite(STDERR, sprintf("#%d left.\n", $clientIndex));
 	}
 
-	protected function onReceive($message, $client, $clientIndex)
+	protected function onReceive($type, $message, $client, $clientIndex)
 	{
-		$type     = $this->dataType($message);
-		$received = $this->decode($message);
 		$response = NULL;
 
 		if(!$this->hub)
 		{
-			$this->hub = new \SeanMorris\Kalisti\Hub;	
+			$this->hub = new \SeanMorris\Kalisti\Hub;
 		}
 
 		if(!isset($this->agents[$clientIndex]))
@@ -269,7 +446,7 @@ class Socket
 				if(is_numeric($channel->name) || preg_match('/^\d+-\d+$/', $channel->name))
 				{
 					$typeByte = static::MESSAGE_TYPES['binary'];
-					
+
 					$header = pack(
 						'vvv'
 						, $origin
@@ -332,18 +509,17 @@ class Socket
 						}
 					}
 
-					$outgoing = json_encode($message);			
+					$outgoing = json_encode($message);
 				}
 
 				$this->send($outgoing, $client, $typeByte);
 			});
 
 			$this->userContext[$clientIndex] = [
-				'__clientIndex' => $clientIndex
-				, '__client'    => $client
-				, '__hub'       => $this->hub
-				, '__agent'     => $agent
-				, '__authed'    => FALSE
+				'__client'   => $client
+				, '__hub'    => $this->hub
+				, '__agent'  => $agent
+				, '__authed' => FALSE
 			];
 		}
 
@@ -355,13 +531,13 @@ class Socket
 				if(isset($this->userContext[$clientIndex])
 					&& $this->userContext[$clientIndex]['__authed']
 				){
-					$channelId = ord($received[0]) + (ord($received[1]) << 8);
+					$channelId = ord($message[0]) + (ord($message[1]) << 8);
 
 					$finalMessage = '';
 
-					for($i = 2; $i < strlen($received); $i++)
+					for($i = 2; $i < strlen($message); $i++)
 					{
-						$finalMessage .= $received[$i];
+						$finalMessage .= $message[$i];
 					}
 
 					$this->hub->publish($channelId, $finalMessage, $agent);
@@ -372,11 +548,11 @@ class Socket
 				// 	"%d[%d]: \"%s\"\n"
 				// 	, $clientIndex
 				// 	, $type
-				// 	, $received
+				// 	, $m
 				// ));
 
 				$routes  = new EntryRoute;
-				$path    = new \SeanMorris\Ids\Path(...preg_split('/\s+/', $received));
+				$path    = new \SeanMorris\Ids\Path(...explode(' ', $message));
 				$request = new \SeanMorris\Ids\Request(['path' => $path]);
 				$router  = new \SeanMorris\Ids\Router($request, $routes);
 
@@ -387,7 +563,7 @@ class Socket
 				{
 					$response = (string) $response;
 				}
-			
+
 				break;
 		}
 

@@ -7,10 +7,19 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	 */
 	public function motd($router)
 	{
-		$clientId = $router->contextGet('__clientIndex');
+		$clientId = $router->contextGet('__agent')->id;
+
+		$uid  = sprintf('0x%04x', $clientId);
+		$name = NULL;
+
+		if($user = $router->contextGet('__persistent'))
+		{
+			$name = $user->username;
+		}
 
 		return new \SeanMorris\SubSpace\Idilic\View\Motd([
-			'name' => sprintf('#0x%04x', $clientId)
+			'name'  => $name
+			, 'uid' => $uid
 		]);
 
 		return sprintf('Welcome to the subspace server, #0x%04x!', $clientId);
@@ -60,13 +69,13 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	public function auth($router)
 	{
 		$args     = $router->path()->consumeNodes();
-		$clientId = $router->contextGet('__clientIndex');
-
+		$agent    = $router->contextGet('__agent');
+		$clientId = $agent->id;
 
 		if($router->contextGet('__authed'))
 		{
 			return [
-				'error' => 'authed.'
+				'error' => sprintf('0x%04x already authed.', $clientId)
 			];
 		}
 
@@ -77,12 +86,28 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 			];
 		}
 
-		if($tokenContent = \SeanMorris\SubSpace\JwtToken::verify($args[0]))
+		$tokenContent = \SeanMorris\SubSpace\JwtToken::verify($args[0]);
+
+		if($tokenContent)
 		{
-			fwrite(STDERR, sprintf(
-				"Client #%d authentiated!\n"
-				, $clientId
-			));
+			$tokenContent = json_decode($tokenContent);
+
+			if($tokenContent->uid)
+			{
+				$user = \SeanMorris\Access\User::loadOneByPublicId(
+					$tokenContent->uid
+				);
+
+				if($user)
+				{
+					$router->contextSet('__authed', TRUE);
+					$router->contextSet('__persistent', $user);
+
+					$agent->contextSet('__persistent', $user);
+
+					return 'authed & logged in.';
+				}
+			}
 
 			$router->contextSet('__authed', TRUE);
 
@@ -149,8 +174,9 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		}
 
 		$channelName = array_shift($args);
+		$message     = implode(' ', $args);
 
-		$hub->publish($channelName, implode(' ', $args), $agent);
+		return $hub->publish($channelName, $message, $agent);
 	}
 
 	/**
@@ -186,6 +212,8 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	 */
 	public function subs($router)
 	{
+		\SeanMorris\Ids\Log::debug('Listing subscriptions');
+
 		$args  = $router->path()->consumeNodes();
 		$hub   = $router->contextGet('__hub');
 		$agent = $router->contextGet('__agent');
@@ -198,6 +226,8 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		}
 
 		$channels = array_keys(array_filter($hub->subscriptions($agent)));
+
+		\SeanMorris\Ids\Log::debug($channels);
 
 		$channels = array_map(function($channel){
 			if(is_numeric($channel))
@@ -446,5 +476,12 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		{
 			return ['error' => 'Bad password.'];
 		}
+	}
+
+	public function logout($router)
+	{
+		$router->contextSet('__persistent', FALSE);
+
+		return 'logged out.';
 	}
 }

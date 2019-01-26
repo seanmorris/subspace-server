@@ -6,8 +6,11 @@ class Motd extends \SeanMorris\Theme\View
 __halt_compiler(); ?>
 Message of the Day: 
 
-Welcome to the subspace server, <?=$name?>!
+Welcome to the subspace server, <?=$name??$uid;?>!
 
+<?php if($name): ?>You've been assined uid <?=$uid;?>.
+
+<?php endif; ?>
 Type 'commands' to get started or '?' for help.
 
 Type 'manual' for more detailed info.

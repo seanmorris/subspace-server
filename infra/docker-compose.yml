@@ -2,55 +2,11 @@ version: '3'
 
 services:
   
-  worker.subspace:
-    build:
-      context: ../
-      dockerfile: infra/worker.Dockerfile
-    image: worker.seanmorr.is
-    restart: on-failure
-    volumes:
-      - ../:/app
-    depends_on:
-      - database.subspace.seanmorr.is
-
   socket.subspace.seanmorr.is:
     build:
       context: ../
-      dockerfile: infra/socket.Dockerfile
+      dockerfile: vendor/seanmorris/subspace/infra/socker.Dockerfile
     image: socket.subspace.seanmorr.is
-    restart: always
-    ports:
-      - "9998:9998"
+    restart: on-failure
     volumes:
       - ../:/app
-    depends_on:
-      - database.subspace.seanmorr.is
-
-  # updater.seanmorr.is:
-  #   build:
-  #     context: ../
-  #     dockerfile: infra/updater.Dockerfile
-  #   image: updater.seanmorr.is
-  #   restart: on-failure
-  #   volumes:
-  #     - ../:/app
-  #   depends_on:
-  #     - database.subspace.seanmorr.is
-    
-  # database.subspace.seanmorr.is:
-  #   image: mysql:5.7
-  #   restart: always
-  #   ports:
-  #     - "9996:3306"
-  #   volumes:
-  #     - schema.subspace.seanmorr.is:/var/lib/mysql
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: 'supersecret'
-  #     MYSQL_USER: 'subspace'
-  #     MYSQL_PASSWORD: 'password'
-  #     MYSQL_DATABASE: 'subspace'
-  #   command: ['mysqld', '--character-set-server=utf8mb4']
-
-volumes:
-  schema.subspace.seanmorr.is:
-    driver: "local"
