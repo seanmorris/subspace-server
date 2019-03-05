@@ -117,7 +117,8 @@ class Socket
 
 				while($rawBytes)
 				{
-					\SeanMorris\Ids\Log::debug('Got message');
+					\SeanMorris\Ids\Log::debug(sprintf('Got message from %d.', $i));
+					\SeanMorris\Ids\Log::debug($rawBytes);
 
 					if(isset($this->partials[$i]))
 					{
@@ -290,6 +291,8 @@ class Socket
 								$decoded .= $data[$ii] ^ $masks[$ii%4];
 							}
 
+							\SeanMorris\Ids\Log::debug($decoded);
+
 							if(!$fin)
 							{
 								if(!isset($this->multiframes[$i]))
@@ -344,6 +347,13 @@ class Socket
 				}
 			}
 		}
+
+		if(!$this->hub)
+		{
+			$this->hub = new \SeanMorris\SubSpace\Kalisti\Hub;
+		}
+
+		$this->hub->tick();
 
 		return;
 	}
@@ -425,7 +435,7 @@ class Socket
 
 		if(!$this->hub)
 		{
-			$this->hub = new \SeanMorris\Kalisti\Hub;
+			$this->hub = new \SeanMorris\SubSpace\Kalisti\Hub;
 		}
 
 		if(!isset($this->agents[$clientIndex]))
@@ -544,12 +554,12 @@ class Socket
 				}
 				break;
 			case(static::MESSAGE_TYPES['text']):
-				// fwrite(STDERR, sprintf(
-				// 	"%d[%d]: \"%s\"\n"
-				// 	, $clientIndex
-				// 	, $type
-				// 	, $m
-				// ));
+				fwrite(STDERR, sprintf(
+					">> %d[%d]: \"%s\"\n"
+					, $clientIndex
+					, $type
+					, $message
+				));
 
 				$routes  = new EntryRoute;
 				$path    = new \SeanMorris\Ids\Path(...explode(' ', $message));
@@ -563,6 +573,13 @@ class Socket
 				{
 					$response = (string) $response;
 				}
+
+				fwrite(STDERR, sprintf(
+					"<< %d[%d]: \"%s\"\n"
+					, $clientIndex
+					, $type
+					, print_r($response, 1)
+				));
 
 				break;
 		}

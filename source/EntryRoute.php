@@ -72,12 +72,13 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		$agent    = $router->contextGet('__agent');
 		$clientId = $agent->id;
 
-		if($router->contextGet('__authed'))
-		{
-			return [
-				'error' => sprintf('0x%04x already authed.', $clientId)
-			];
-		}
+		// if($router->contextGet('__authed')
+		// 	&& $router->contextGet('__persistent')
+		// ){
+		// 	return [
+		// 		'error' => sprintf('0x%04x already authed.', $clientId)
+		// 	];
+		// }
 
 		if(count($args) < 1)
 		{
