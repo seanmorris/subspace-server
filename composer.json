@@ -1,6 +1,6 @@
 {
     "name": "seanmorris/subspace",
-    "description": "Kalisti websocket server.",
+    "description": "Kallisti websocket server.",
     "authors": [
         {
             "name": "Sean Morris",
@@ -13,7 +13,7 @@
         "seanmorris/form": "dev-master",
         "seanmorris/message": "dev-master",
         "seanmorris/presskit": "dev-master",
-        "seanmorris/kalisti": "dev-master"
+        "seanmorris/Kallisti": "dev-master"
     },
     "require-dev": {
         "simpletest/simpletest": "dev-master"
@@ -43,7 +43,7 @@
         },
         {   
             "type": "vcs",
-            "url": "git@github.com:seanmorris/kalisti.git"
+            "url": "git@github.com:seanmorris/.git"
         }
     ]
 }

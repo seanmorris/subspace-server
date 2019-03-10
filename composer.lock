@@ -171,16 +171,16 @@
             "time": "2018-12-12 21:01:08"
         },
         {
-            "name": "seanmorris/kalisti",
+            "name": "seanmorris/kallisti",
             "version": "dev-master",
             "source": {
                 "type": "git",
-                "url": "https://github.com/seanmorris/kalisti.git",
+                "url": "https://github.com/seanmorris/.git",
                 "reference": "a95a5c408221a965b8acbefcbf7f411393ac6a6c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/seanmorris/kalisti/zipball/a95a5c408221a965b8acbefcbf7f411393ac6a6c",
+                "url": "https://api.github.com/repos/seanmorris//zipball/a95a5c408221a965b8acbefcbf7f411393ac6a6c",
                 "reference": "a95a5c408221a965b8acbefcbf7f411393ac6a6c",
                 "shasum": ""
             },
@@ -190,8 +190,8 @@
             "type": "library",
             "autoload": {
                 "psr-4": {
-                    "SeanMorris\\Kalisti\\Test\\": "test/",
-                    "SeanMorris\\Kalisti\\": "source/"
+                    "SeanMorris\\Kallisti\\Test\\": "test/",
+                    "SeanMorris\\Kallisti\\": "source/"
                 }
             },
             "authors": [
@@ -202,8 +202,8 @@
             ],
             "description": "Channel based messaging interface",
             "support": {
-                "source": "https://github.com/seanmorris/kalisti/tree/master",
-                "issues": "https://github.com/seanmorris/kalisti/issues"
+                "source": "https://github.com/seanmorris//tree/master",
+                "issues": "https://github.com/seanmorris//issues"
             },
             "time": "2018-12-14 15:52:35"
         },
@@ -393,7 +393,7 @@
         "seanmorris/form": 20,
         "seanmorris/message": 20,
         "seanmorris/presskit": 20,
-        "seanmorris/kalisti": 20,
+        "seanmorris/": 20,
         "simpletest/simpletest": 20
     },
     "prefer-stable": false,

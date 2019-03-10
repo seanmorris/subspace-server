@@ -8,7 +8,7 @@ class RootRoute implements \SeanMorris\Ids\Routable
 	{
 		$args = $router->path()->consumeNodes();
 
-		var_dump(\SeanMorris\Kalisti\Channel::compareNames(...$args));
+		var_dump(\SeanMorris\Kallisti\Channel::compareNames(...$args));
 	}
 
 	public function server()

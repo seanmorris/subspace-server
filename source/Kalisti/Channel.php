@@ -1,6 +1,6 @@
 <?php
-namespace SeanMorris\SubSpace\Kalisti;
-class Channel extends \SeanMorris\Kalisti\Channel
+namespace SeanMorris\SubSpace\Kallisti;
+class Channel extends \SeanMorris\Kallisti\Channel
 {
 	public function tick(){}
 }

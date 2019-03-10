@@ -17,8 +17,8 @@ class Socket
 
 	public function __construct()
 	{
-		// $this->hub = new \SeanMorris\Kalisti\Hub;	
-		// $this->localAgent = new \SeanMorris\Kalisti\Agent;
+		// $this->hub = new \SeanMorris\Kallisti\Hub;	
+		// $this->localAgent = new \SeanMorris\Kallisti\Agent;
 		// $this->localAgent->register($this->hub);
 
 		$keyFile    = '/etc/letsencrypt/live/example.com/privkey.pem';
@@ -350,7 +350,7 @@ class Socket
 
 		if(!$this->hub)
 		{
-			$this->hub = new \SeanMorris\SubSpace\Kalisti\Hub;
+			$this->hub = new \SeanMorris\SubSpace\Kallisti\Hub;
 		}
 
 		$this->hub->tick();
@@ -435,12 +435,12 @@ class Socket
 
 		if(!$this->hub)
 		{
-			$this->hub = new \SeanMorris\SubSpace\Kalisti\Hub;
+			$this->hub = new \SeanMorris\SubSpace\Kallisti\Hub;
 		}
 
 		if(!isset($this->agents[$clientIndex]))
 		{
-			$this->agents[$clientIndex] = new \SeanMorris\Kalisti\Agent;
+			$this->agents[$clientIndex] = new \SeanMorris\Kallisti\Agent;
 		}
 
 		$agent = $this->agents[$clientIndex];
@@ -493,7 +493,7 @@ class Socket
 						$originType = 'server';
 						$originId   = NULL;
 					}
-					else if($origin instanceof \SeanMorris\Kalisti\Agent)
+					else if($origin instanceof \SeanMorris\Kallisti\Agent)
 					{
 						$originType = 'user';
 						$originId   = $origin->id;
