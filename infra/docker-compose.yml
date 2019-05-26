@@ -1,12 +1,25 @@
 version: '3'
 
 services:
-  
-  socket.subspace.seanmorr.is:
+
+  is.seanmorr.subspace.socket:
     build:
       context: ../
-      dockerfile: vendor/seanmorris/subspace/infra/socker.Dockerfile
-    image: socket.subspace.seanmorr.is
+      dockerfile: infra/socket.Dockerfile
+    image: seanmorris/subspace-socket
     restart: on-failure
+    ports:
+      - "9998:9998"
+    volumes:
+      - ../:/app
+
+  is.seanmorr.subspace.web:
+    build:
+      context: ../
+      dockerfile: infra/web.Dockerfile
+    image: seanmorris/subspace-web
+    restart: always
+    ports:
+      - "80:80"
     volumes:
       - ../:/app

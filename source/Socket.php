@@ -21,12 +21,12 @@ class Socket
 		// $this->localAgent = new \SeanMorris\Kallisti\Agent;
 		// $this->localAgent->register($this->hub);
 
-		$keyFile    = '/etc/letsencrypt/live/example.com/privkey.pem';
-		$chainFile  = '/etc/letsencrypt/live/example.com/chain.pem';
+		// $keyFile    = '/etc/letsencrypt/live/example.com/privkey.pem';
+		// $chainFile  = '/etc/letsencrypt/live/example.com/chain.pem';
 
-		$keyFile    = '/home/sean/ssl_test/privkey.pem';
-		$chainFile  = '/home/sean/ssl_test/chain.pem';
-		$passphrase = '';
+		// $keyFile    = '/home/sean/ssl_test/privkey.pem';
+		// $chainFile  = '/home/sean/ssl_test/chain.pem';
+		// $passphrase = '';
 		$address    = '0.0.0.0:9998';
 
 		$context = stream_context_create([]);
@@ -561,7 +561,14 @@ class Socket
 					, $message
 				));
 
-				$routes  = new EntryRoute;
+				$entryRoute = 'SeanMorris\SubSpace\EntryRoute';
+
+				if($configRoute = \SeanMorris\Ids\Settings::read('socketEntryPoint'))
+				{
+					$entryRoute = $configRoute;
+				}
+
+				$routes  = new $entryRoute;
 				$path    = new \SeanMorris\Ids\Path(...explode(' ', $message));
 				$request = new \SeanMorris\Ids\Request(['path' => $path]);
 				$router  = new \SeanMorris\Ids\Router($request, $routes);
