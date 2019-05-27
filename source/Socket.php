@@ -451,7 +451,7 @@ class Socket
 
 			$this->hub->unsubscribe('*', $agent);
 
-			$agent->expose(function($content, $output, $origin, $channel, $originalChannel) use($client){
+			$agent->expose(function($content, $output, $origin, $channel, $originalChannel, $cc = NULL) use($client){
 
 				if(is_numeric($channel->name) || preg_match('/^\d+-\d+$/', $channel->name))
 				{
@@ -517,6 +517,11 @@ class Socket
 						{
 							$message['originalChannel'] = $originalChannel;
 						}
+					}
+
+					if(isset($cc))
+					{
+						$message['cc'] = $cc;
 					}
 
 					$outgoing = json_encode($message);

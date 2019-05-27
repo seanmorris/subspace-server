@@ -112,6 +112,109 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	}
 
 	/**
+	 * Send a message to one or more users on a given channel.
+	 */
+	public function say($router)
+	{
+		$args  = $router->path()->consumeNodes();
+		$hub   = $router->contextGet('__hub');
+		$agent = $router->contextGet('__agent');
+
+		if(!$router->contextGet('__authed'))
+		{
+			return [
+				'error' => 'You need to auth before you can send.'
+			];
+		}
+
+		if(count($args) < 1)
+		{
+			return [
+				'error' => 'Please supply a channel selector.'
+			];
+		}
+
+		if(count($args) < 2)
+		{
+			return [
+				'error' => 'Please supply recipient count.'
+			];
+		}
+
+		$channelName  = $args[0];
+		$toCount      = $args[1];
+		$whisperCount = 0;
+
+		if(count($args) < 2 + $toCount)
+		{
+			return [
+				'error' => sprintf(
+					"Please provide a full list of recipients. (You specified %d.)"
+					, $toCount
+				)
+			];
+		}
+
+		$recipients        = array_slice($args, 2, $toCount);
+		$whisperRecipients = [];
+
+		$do = sprintf(
+			'saying to %d (%s)'
+			, $toCount
+			, implode(', ', $recipients)
+		) . PHP_EOL;
+
+		if(count($args) > 3 + $toCount)
+		{
+			$whisperCount = $args[2 + $toCount];
+
+			if(preg_match('/^\d+$/', $whisperCount))
+			{
+				if(count($args) < 3 + $toCount + $whisperCount)
+				{
+					return [
+						'error' => sprintf(
+							"Please provide a full list of whisper recipients. (You specified %d.)"
+							, $whisperCount
+						)
+					];
+				}
+
+				$whisperRecipients = array_slice($args, 3 + $toCount, $whisperCount);
+
+				$do .= sprintf(
+					'whispering to %d (%s)'
+					, $whisperCount
+					, implode(', ', $whisperRecipients)
+				) . PHP_EOL;
+			}
+			else
+			{
+				return [
+					'error' => 'Please supply a numerical whisper count.'
+				];
+			}
+		}
+
+		$do .= sprintf(
+			"on channel %d:"
+			, $channelName
+		) . PHP_EOL;
+
+		$message = implode(' ', array_slice($args, 3 + $toCount + $whisperCount));
+
+		$do .= $message;
+
+		return $hub->say(
+			$args[0]
+			, $message
+			, $agent
+			, $recipients
+			, $whisperRecipients
+		);
+	}
+
+	/**
 	 * Subscribe to a channel individually or by a selector.
 	 */
 	public function sub($router)
@@ -250,7 +353,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	 */
 	public function commands()
 	{
-		$reflection = new \ReflectionClass(get_class());
+		$reflection = new \ReflectionClass(get_called_class());
 		$methods = $reflection->getMethods(\ReflectionMethod::IS_PUBLIC);
 
 		$_methods = [];
