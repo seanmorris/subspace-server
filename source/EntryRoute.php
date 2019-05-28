@@ -7,7 +7,8 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	 */
 	public function auth($router)
 	{
-		$args     = $router->path()->consumeNodes();
+		$path     = clone $router->path();
+		$args     = $path->consumeNodes();
 		$agent    = $router->contextGet('__agent');
 		$clientId = $agent->id;
 
@@ -18,28 +19,26 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 			];
 		}
 
-		$tokenContent = \SeanMorris\SubSpace\JwtToken::verify($args[0]);
-
-		if($tokenContent)
+		if($tokenContent = \SeanMorris\SubSpace\JwtToken::verify($args[0]))
 		{
 			$tokenContent = json_decode($tokenContent);
 
-			if($tokenContent->uid)
-			{
-				$user = \SeanMorris\Access\User::loadOneByPublicId(
-					$tokenContent->uid
-				);
+			// if($tokenContent->uid)
+			// {
+			// 	$user = \SeanMorris\Access\User::loadOneByPublicId(
+			// 		$tokenContent->uid
+			// 	);
 
-				if($user)
-				{
-					$router->contextSet('__authed', TRUE);
-					$router->contextSet('__persistent', $user);
+			// 	if($user)
+			// 	{
+			// 		$router->contextSet('__authed', TRUE);
+			// 		$router->contextSet('__persistent', $user);
 
-					$agent->contextSet('__persistent', $user);
+			// 		$agent->contextSet('__persistent', $user);
 
-					return 'authed & logged in.';
-				}
-			}
+			// 		return 'authed & logged in.';
+			// 	}
+			// }
 
 			$router->contextSet('__authed', TRUE);
 
@@ -256,7 +255,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		if(!$router->contextGet('__authed'))
 		{
 			return [
-				'error' => 'You need to auth before you can subs.'
+				'error' => 'You need to auth before you can run "subs".'
 			];
 		}
 
@@ -291,7 +290,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		if(!$router->contextGet('__authed'))
 		{
 			return [
-				'error' => 'You need to auth before you can unsub.'
+				'error' => 'You need to auth before you can run "unsub".'
 			];
 		}
 
@@ -382,5 +381,31 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		}
 
 		return ['commands' => $_methods];
+	}
+
+	/**
+	 * View your connection details IP.
+	 */
+	public function connection($router)
+	{
+		if(!$router->contextGet('__authed'))
+		{
+			return [
+				'error' => 'You need to auth before you can run "connection".'
+			];
+		}
+
+		$remote = $router->contextGet('__remote');
+		$parts  = explode(':', $remote);
+
+		return [
+			'address'  => $parts[0] ?? NULL
+			, 'uniqid' => $router->contextGet('__uniqid')
+			, 'jwt'    => (string) new \SeanMorris\SubSpace\JwtToken([
+				'time'      => microtime(TRUE)
+				, 'address' => $parts[0] ?? NULL
+				, 'uniqid'  => $router->contextGet('__uniqid')
+			])
+		];
 	}
 }

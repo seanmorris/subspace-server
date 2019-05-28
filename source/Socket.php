@@ -535,6 +535,8 @@ class Socket
 				, '__hub'    => $this->hub
 				, '__agent'  => $agent
 				, '__authed' => FALSE
+				, '__remote' => stream_socket_get_name($client, TRUE)
+				, '__uniqid' => uniqid()
 			];
 		}
 
