@@ -27,7 +27,12 @@ class Socket
 		// $keyFile    = '/home/sean/ssl_test/privkey.pem';
 		// $chainFile  = '/home/sean/ssl_test/chain.pem';
 		// $passphrase = '';
-		$address    = '0.0.0.0:9998';
+		$address = '0.0.0.0:9998';
+
+		if($s = \SeanMorris\Ids\Settings::read('socketAddress'))
+		{
+			$address = $s;
+		}
 
 		$context = stream_context_create([]);
 		// $context = stream_context_create([
@@ -38,6 +43,11 @@ class Socket
 		// 		, 'verify_peer' => FALSE
 		// 	]
 		// ]);
+
+		fwrite(STDERR, sprintf(
+			'Attempting to listen on "%s"...'
+			, $address
+		));
 
 		$this->socket = stream_socket_server(
 			$address
