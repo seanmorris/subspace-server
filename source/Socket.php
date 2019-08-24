@@ -45,7 +45,7 @@ class Socket
 		// ]);
 
 		fwrite(STDERR, sprintf(
-			'Attempting to listen on "%s"...'
+			'Attempting to listen on "%s"...' . PHP_EOL
 			, $address
 		));
 
