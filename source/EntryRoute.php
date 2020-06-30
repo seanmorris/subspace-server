@@ -47,11 +47,30 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	}
 
 	/**
+	 * Get a JWT token for AJAX requests.
+	 */
+	public function token($router)
+	{
+		$agent    = $router->contextGet('__agent');
+		$clientId = $agent->id;
+
+		$token    = (string) new \SeanMorris\SubSpace\JwtToken([
+			'time'  => microtime(TRUE)
+			, 'cid' => $clientId
+		]);
+
+		return [
+			'token' => $token
+			, 'you' => true
+		];
+	}
+
+	/**
 	 * Get/Set your nickname.
 	 */
 	public function nick($router)
 	{
-		$args   = $router->path()->consumeNodes();
+		$args = $router->path()->consumeNodes();
 
 		if(!$router->contextGet('__authed'))
 		{

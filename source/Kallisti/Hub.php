@@ -11,5 +11,21 @@ class Hub extends \SeanMorris\Kallisti\Hub
 				$channel->tick();
 			}
 		}
+
+		$entryRoute = 'SeanMorris\SubSpace\EntryRoute';
+
+		if($configRoute = \SeanMorris\Ids\Settings::read('socketEntryPoint'))
+		{
+			$entryRoute = $configRoute;
+		}
+
+		$entryRoute = new $entryRoute;
+
+		$entryRoute->_tick($this);
+	}
+
+	public function agent($id)
+	{
+		return $this->agents[$id] ?? FALSE;
 	}
 }
