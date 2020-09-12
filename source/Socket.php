@@ -17,32 +17,48 @@ class Socket
 
 	public function __construct()
 	{
-		// $this->hub = new \SeanMorris\Kallisti\Hub;	
+		// $this->hub = new \SeanMorris\Kallisti\Hub;
 		// $this->localAgent = new \SeanMorris\Kallisti\Agent;
 		// $this->localAgent->register($this->hub);
 
 		// $keyFile    = '/etc/letsencrypt/live/example.com/privkey.pem';
 		// $chainFile  = '/etc/letsencrypt/live/example.com/chain.pem';
 
-		// $keyFile    = '/home/sean/ssl_test/privkey.pem';
-		// $chainFile  = '/home/sean/ssl_test/chain.pem';
-		// $passphrase = '';
-		$address = '0.0.0.0:9998';
+		$socketSettings = \SeanMorris\Ids\Settings::read('websocket');
 
-		if($s = \SeanMorris\Ids\Settings::read('socketAddress'))
+		$passphrase = NULL;
+		$certFile   = NULL;
+		$keyFile    = NULL;
+		$keyPath    = NULL;
+		$address    = '0.0.0.0:9998';
+
+		if($socketSettings)
 		{
-			$address = $s;
+			$address    = $socketSettings->listen ?? NULL;
+			$keyPath    = IDS_ROOT . '/data/local/certbot/';
+
+			$passphrase = $socketSettings->passphrase ?? NULL;
+			$certFile   = $socketSettings->certFile   ?? NULL;
+			$keyFile    = $socketSettings->keyFile    ?? NULL;
 		}
 
-		$context = stream_context_create([]);
-		// $context = stream_context_create([
-		// 	'ssl'=>[
-		// 		'local_cert'    => $chainFile
-		// 		, 'local_pk'    => $keyFile
-		// 		, 'passphrase'  => $passphrase
-		// 		, 'verify_peer' => FALSE
-		// 	]
-		// ]);
+		$contextOptions = [];
+
+		if($keyFile && $certFile)
+		{
+			// $contextOptions = [
+			// 	'ssl'=>[
+			// 		'local_cert'    => $keyPath . $certFile
+			// 		, 'local_pk'    => $keyPath . $keyFile
+			// 		, 'passphrase'  => $passphrase
+			// 		, 'verify_peer' => FALSE
+			// 	]
+			// ];
+		}
+
+		\SeanMorris\Ids\Log::error($contextOptions);
+
+		$context = stream_context_create($contextOptions);
 
 		fwrite(STDERR, sprintf(
 			'Attempting to listen on "%s"...' . PHP_EOL
@@ -144,7 +160,7 @@ class Socket
 						$data .= $append;
 
 						$remaining = $length - strlen($data);
-						
+
 						\SeanMorris\Ids\Log::debug(sprintf(
 							'Appending %d bytes, %d/%d remaining...'
 							, strlen($append)
