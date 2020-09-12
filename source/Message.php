@@ -47,8 +47,6 @@ class Message
 
 		$message->decode($input);
 
-		var_dump($message);
-
 		print $message->decoded;
 	}
 
@@ -134,7 +132,7 @@ class Message
 
 					if(!$this->masked)
 					{
-						$this->decoded .= $this->masks;
+						$this->rawFrame = $this->masks . $this->rawFrame;
 					}
 
 					for ($i = 0; $i < $this->length; ++$i)
@@ -167,7 +165,7 @@ class Message
 						return;
 					}
 
-					if($rawBytes = substr($this->rawFrame, $length))
+					if($rawBytes = substr($this->rawFrame, $this->length))
 					{
 						$this->leftover = $rawBytes;
 					}
@@ -220,7 +218,15 @@ class Message
 					return;
 				}
 
-				$this->decoded .= $this->rawFrame[$i] ^ $this->masks[$i%4];
+				if($this->masked)
+				{
+					$this->decoded .= $this->rawFrame[$i] ^ $this->masks[$i%4];
+				}
+				else
+				{
+					$this->decoded .= $this->rawFrame[$i];
+				}
+
 			}
 
 			if(!$this->fin)
@@ -244,6 +250,16 @@ class Message
 				, strlen($this->leftover)
 			));
 		}
+	}
+
+	public function isDone()
+	{
+		return $this->fin;
+	}
+
+	public function content()
+	{
+		return $this->decoded;
 	}
 
 	protected function fin($rawBytes)
@@ -270,21 +286,24 @@ class Message
 
 	public function encode($content, $typeByte = 0x1)
 	{
-		$length = strlen($content);
+		$this->length = strlen($content);
+
+		$this->type = $typeByte;
+		$this->fin  = TRUE;
 
 		$typeByte += 0x80;
 
-		if($length < 0x7E)
+		if($this->length < 0x7E)
 		{
-			$this->encoded .= pack('CC', $typeByte, $length) . $content;
+			$this->encoded .= pack('CC', $typeByte, $this->length) . $content;
 		}
-		else if($length < 0x10000)
+		else if($this->length < 0x10000)
 		{
-			$this->encoded .= pack('CCn', $typeByte, 0x7E, $length) . $content;
+			$this->encoded .= pack('CCn', $typeByte, 0x7E, $this->length) . $content;
 		}
 		else
 		{
-			$this->encoded .= pack('CCNN', $typeByte, 0x7F, 0, $length) . $content;
+			$this->encoded .= pack('CCNN', $typeByte, 0x7F, 0, $this->length) . $content;
 		}
 
 		return $this->encoded;

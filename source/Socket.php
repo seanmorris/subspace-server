@@ -150,7 +150,7 @@ class Socket
 					{
 						\SeanMorris\Ids\Log::debug('Resuming deferred message...');
 
-						list($type, $data, $masks, $fin, $length) = $this->partials[$i];
+						list($type, $data, $masks, $masked, $fin, $length) = $this->partials[$i];
 
 						$remaining = $length - strlen($data);
 
@@ -187,12 +187,20 @@ class Socket
 										'Deferring...'
 									));
 									$this->partials[$i] = [
-										$type, $data, $masks, $fin, $length
+										$type, $data, $masks, $masked, $fin, $length
 									];
 									return FALSE;
 								}
 
-								$decoded .= $data[$ii] ^ $masks[$ii%4];
+								if($masked)
+								{
+									$decoded .= $data[$ii] ^ $masks[$ii%4];
+								}
+								else
+								{
+									$decoded .= $data[$ii];
+								}
+
 							}
 
 							$this->partials[$i] = NULL;
@@ -234,7 +242,7 @@ class Socket
 						else
 						{
 							$this->partials[$i] = [
-								$type, $data, $masks, $fin, $length
+								$type, $data, $masks, $masked, $fin, $length
 							];
 						}
 
@@ -266,7 +274,9 @@ class Socket
 							}
 						case(static::MESSAGE_TYPES['text']):
 						case(static::MESSAGE_TYPES['binary']):
-							$length = ord($rawBytes[1]) & 127;
+
+							$masked = ord($rawBytes[1]) & 0b10000000;
+							$length = ord($rawBytes[1]) & 0b01111111;
 
 							if($length == 126)
 							{
@@ -301,6 +311,11 @@ class Socket
 								));
 							}
 
+							if(!$masked)
+							{
+								$data = $masks . $data;
+							}
+
 							for ($ii = 0; $ii < $length; ++$ii)
 							{
 								if(!isset($data[$ii]))
@@ -309,12 +324,20 @@ class Socket
 										'Deferring...'
 									));
 									$this->partials[$i] = [
-										$type, $data, $masks, $fin, $length
+										$type, $data, $masks, $masked, $fin, $length
 									];
 									return FALSE;
 								}
 
-								$decoded .= $data[$ii] ^ $masks[$ii%4];
+								if($masked)
+								{
+									$decoded .= $data[$ii] ^ $masks[$ii%4];
+								}
+								else
+								{
+									$decoded .= $data[$ii];
+								}
+
 							}
 
 							\SeanMorris\Ids\Log::debug($decoded);
@@ -409,9 +432,7 @@ class Socket
 		if(get_resource_type($client) == 'stream')
 		{
 			stream_set_blocking($client, TRUE);
-
 			fwrite($client, $encoded);
-
 			stream_set_blocking($client, FALSE);
 		}
 	}
@@ -447,7 +468,7 @@ class Socket
 
 	protected function onConnect($client, $clientIndex)
 	{
-		// fwrite(STDERR, sprintf("#%d joined.\n", $clientIndex));
+		fwrite(STDERR, sprintf("#%d joined.\n", $clientIndex));
 	}
 
 	protected function onDisconnect($client, $clientIndex)
@@ -477,7 +498,7 @@ class Socket
 
 			$this->hub->unsubscribe('*', $agent);
 
-			$agent->expose(function($content, $output, $origin, $channel, $originalChannel, $cc = NULL) use($client){
+			$agent->expose(function($content, $output, $origin, $channel, $originalChannel, $cc = NULL) use($client, $clientIndex){
 
 				if(is_numeric($channel->name) || preg_match('/^\d+-\d+$/', $channel->name))
 				{
@@ -553,7 +574,15 @@ class Socket
 					$outgoing = json_encode($message);
 				}
 
-				$this->send($outgoing, $client, $typeByte);
+				try
+				{
+					$this->send($outgoing, $client, $typeByte);
+				}
+				catch (\Exception $exception)
+				{
+					unset($this->clients[$clientIndex]);
+				}
+
 			});
 
 			$this->userContext[$clientIndex] = [
@@ -624,27 +653,34 @@ class Socket
 				break;
 		}
 
-		if(is_integer($response))
+		try
 		{
-			$this->send(
-				pack(
-					'vvvP'
-					, 0
-					, 0
-					, 0
-					, $response
-				)
-				, $client
-				, static::MESSAGE_TYPES['binary']
-			);
+			if(is_integer($response))
+			{
+				$this->send(
+					pack(
+						'vvvP'
+						, 0
+						, 0
+						, 0
+						, $response
+					)
+					, $client
+					, static::MESSAGE_TYPES['binary']
+				);
+			}
+			else if($response !== NULL)
+			{
+				$this->send(
+					json_encode($response)
+					, $client
+					, static::MESSAGE_TYPES['text']
+				);
+			}
 		}
-		else if($response !== NULL)
+		catch (\Exception $exception)
 		{
-			$this->send(
-				json_encode($response)
-				, $client
-				, static::MESSAGE_TYPES['text']
-			);
+			unset($this->clients[$clientIndex]);
 		}
 	}
 }
