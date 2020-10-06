@@ -25,23 +25,23 @@
 		}
 	},
 	"repositories": [
-        {   
+        {
             "type": "vcs",
             "url":  "git@github.com:seanmorris/ids.git"
         },
-        {   
+        {
             "type": "vcs",
             "url": "git@github.com:seanmorris/presskit.git"
         },
-        {   
+        {
             "type": "vcs",
             "url": "git@github.com:seanmorris/message.git"
         },
-        {   
+        {
             "type": "vcs",
             "url": "git@github.com:seanmorris/access.git"
         },
-        {   
+        {
             "type": "vcs",
             "url": "git@github.com:seanmorris/.git"
         }
