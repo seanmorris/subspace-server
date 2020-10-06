@@ -1,50 +1,70 @@
 <?php
 namespace SeanMorris\SubSpace;
+
+
+use \SeanMorris\SubSpace\Message;
+use \SeanMorris\SubSpace\MessageProducer;
+
+use \SeanMorris\SubSpace\Kallisti\Hub;
+
 class Socket
 {
-	protected $socket, $clients, $partials, $types, $multiframes, $leftovers;
-	const
-		MAX              = 1
-		, FREQUENCY      = 120
-		, MESSAGE_TYPES  = [
-			'continuous' => 0
-			, 'text'     => 1
-			, 'binary'   => 2
-			, 'close'    => 8
-			, 'ping'     => 9
-			, 'pong'     => 10
-		];
+	protected static
+		$Producer  = MessageProducer::Class
+		, $Message = Message::Class
+		, $Hub     = Hub::Class
+	;
+
+	protected
+		$socket
+		, $partials
+		, $userContext = []
+		, $crypto      = false
+		, $agents      = []
+		, $hub         = NULL
+	;
 
 	public function __construct()
 	{
-		// $this->hub = new \SeanMorris\Kallisti\Hub;	
-		// $this->localAgent = new \SeanMorris\Kallisti\Agent;
-		// $this->localAgent->register($this->hub);
+		$this->hub = new static::$Hub;
 
-		// $keyFile    = '/etc/letsencrypt/live/example.com/privkey.pem';
-		// $chainFile  = '/etc/letsencrypt/live/example.com/chain.pem';
+		$socketSettings = \SeanMorris\Ids\Settings::read('websocket');
 
-		// $keyFile    = '/home/sean/ssl_test/privkey.pem';
-		// $chainFile  = '/home/sean/ssl_test/chain.pem';
-		// $passphrase = '';
-		$address = '0.0.0.0:9998';
+		$passphrase = NULL;
+		$certFile   = NULL;
+		$keyFile    = NULL;
+		$keyPath    = NULL;
+		$address    = 'localhost:9998';
 
-		if($s = \SeanMorris\Ids\Settings::read('socketAddress'))
+		if($socketSettings)
 		{
-			$address = $s;
+			$address    = $socketSettings->listen ?? $address;
+			$keyPath    = IDS_ROOT . '/data/local/certbot/';
+
+			$passphrase = $socketSettings->passphrase ?? NULL;
+			$certFile   = $socketSettings->certFile   ?? NULL;
+			$keyFile    = $socketSettings->keyFile    ?? NULL;
 		}
 
-		$context = stream_context_create([]);
-		// $context = stream_context_create([
-		// 	'ssl'=>[
-		// 		'local_cert'    => $chainFile
-		// 		, 'local_pk'    => $keyFile
-		// 		, 'passphrase'  => $passphrase
-		// 		, 'verify_peer' => FALSE
-		// 	]
-		// ]);
+		$contextOptions = [];
 
-		fwrite(STDERR, sprintf(
+		if($keyFile && $certFile)
+		{
+			$contextOptions = [
+				'ssl'=>[
+					'local_cert'    => $keyPath . $certFile
+					, 'local_pk'    => $keyPath . $keyFile
+					, 'passphrase'  => $passphrase
+					, 'verify_peer' => FALSE
+				]
+			];
+
+			$this->crypto = TRUE;
+		}
+
+		$context = stream_context_create($contextOptions);
+
+		\SeanMorris\Ids\Log::debug(sprintf(
 			'Attempting to listen on "%s"...' . PHP_EOL
 			, $address
 		));
@@ -57,33 +77,32 @@ class Socket
 			, $context
 		);
 
-		$this->clients     = [];
-		$this->partials    = [];
-		$this->types       = [];
-		$this->multiframes = [];
-		$this->leftovers   = [];
+		$this->producers = [];
 	}
 
 	public function tick()
 	{
-		if($newStream = stream_socket_accept($this->socket, 0))
+		if($newSocket = stream_socket_accept($this->socket, 0))
 		{
-			stream_set_blocking($newStream, TRUE);
+			stream_set_blocking($newSocket, TRUE);
 
-			// stream_socket_enable_crypto(
-			// 	$newStream
-			// 	, TRUE
-			// 	, STREAM_CRYPTO_METHOD_SSLv23_SERVER
-			// );
+			if($this->crypto)
+			{
+				stream_socket_enable_crypto(
+					$newSocket
+					, TRUE
+					, STREAM_CRYPTO_METHOD_SSLv23_SERVER
+				);
+			}
 
-			$incomingHeaders = fread($newStream, 2**16);
+			$incomingHeaders = fread($newSocket, 2**16);
 
 			if(preg_match('#^Sec-WebSocket-Key: (\S+)#mi', $incomingHeaders, $match))
 			{
-				stream_set_blocking($newStream, FALSE);
+				stream_set_blocking($newSocket, FALSE);
 
 				fwrite(
-					$newStream
+					$newSocket
 					, "HTTP/1.1 101 Switching Protocols\r\n"
 						. "Upgrade: websocket\r\n"
 						. "Connection: Upgrade\r\n"
@@ -96,271 +115,39 @@ class Socket
 						. "\r\n\r\n"
 				);
 
-				$this->clients[] = $newStream;
+				$producer = new static::$Producer($newSocket);
+				$pIndex   = count($this->producers);
 
-				$this->onConnect($newStream, count($this->clients) - 1);
+				$this->producers[$pIndex] = $producer;
+
+				$this->onConnect($producer, $pIndex);
 			}
 			else
 			{
-				stream_socket_shutdown($newStream, STREAM_SHUT_RDWR);
+				stream_socket_shutdown($newSocket, STREAM_SHUT_RDWR);
 			}
 		}
 
-		// Get data from clients
-
-		foreach($this->clients as $i => $client)
+		foreach($this->producers as $i => $producer)
 		{
-			if(!$client)
+			if(!$producer || $producer->done())
 			{
 				continue;
 			}
 
-			$decoded = '';
+			$message = $producer->check();
 
-			while(($rawBytes = fread($client, 2**16)) || isset($this->leftovers[$i]))
+			if($message === NULL)
 			{
-				if(isset($this->leftovers[$i]))
-				{
-					$rawBytes = $this->leftovers[$i] . $rawBytes;
-					$this->leftovers[$i] = NULL;
-				}
-
-				while($rawBytes)
-				{
-					\SeanMorris\Ids\Log::debug(sprintf('Got message from %d.', $i));
-					\SeanMorris\Ids\Log::debug($rawBytes);
-
-					if(isset($this->partials[$i]))
-					{
-						\SeanMorris\Ids\Log::debug('Resuming deferred message...');
-
-						list($type, $data, $masks, $fin, $length) = $this->partials[$i];
-
-						$remaining = $length - strlen($data);
-
-						$append   = substr($rawBytes, 0, $remaining);
-						$rawBytes = substr($rawBytes, $remaining);
-
-						$data .= $append;
-
-						$remaining = $length - strlen($data);
-						
-						\SeanMorris\Ids\Log::debug(sprintf(
-							'Appending %d bytes, %d/%d remaining...'
-							, strlen($append)
-							, $remaining
-							, $length
-						));
-
-						if(isset($this->multiframes[$i]))
-						{
-							$decoded = $this->multiframes[$i];
-						}
-
-						if($remaining <= 0)
-						{
-							\SeanMorris\Ids\Log::debug(sprintf(
-								'Decoding...'
-							));
-
-							for ($ii = 0; $ii < $length; ++$ii)
-							{
-								if(!isset($data[$ii]))
-								{
-									\SeanMorris\Ids\Log::debug(sprintf(
-										'Deferring...'
-									));
-									$this->partials[$i] = [
-										$type, $data, $masks, $fin, $length
-									];
-									return FALSE;
-								}
-
-								$decoded .= $data[$ii] ^ $masks[$ii%4];
-							}
-
-							$this->partials[$i] = NULL;
-
-							if(!$fin && $rawBytes)
-							{
-								if(!isset($this->multiframes[$i]))
-								{
-									$this->multiframes[$i] = '';
-								}
-
-								$this->multiframes[$i] = $decoded;
-
-								if($rawBytes)
-								{
-									$this->leftovers[$i] = $rawBytes;
-									continue 3;
-								}
-								\SeanMorris\Ids\Log::debug(sprintf(
-									'Waiting for next few bytes...'
-								));
-								continue 3;
-							}
-
-							\SeanMorris\Ids\Log::debug(sprintf(
-								'Decoding complete. Got %d bytes.'
-								, strlen($decoded)
-							), $this->types[$i]);
-
-							$this->onReceive(
-								$this->types[$i]
-								, $decoded
-								, $client
-								, $i
-							);
-
-							$this->multiframes[$i] = $decoded = '';
-						}
-						else
-						{
-							$this->partials[$i] = [
-								$type, $data, $masks, $fin, $length
-							];
-						}
-
-						return FALSE;
-					}
-
-					$fin  = $this->fin($rawBytes);
-					$type = $this->dataType($rawBytes);
-
-					if($type)
-					{
-						$this->types[$i] = $type;
-					}
-
-					\SeanMorris\Ids\Log::debug('Type', $type);
-
-					switch($type)
-					{
-						case(static::MESSAGE_TYPES['ping']):
-							fwrite(STDERR, 'Received a ping!');
-							break;
-						case(static::MESSAGE_TYPES['pong']):
-							fwrite(STDERR, 'Received a pong!');
-							break;
-						case(static::MESSAGE_TYPES['continuous']):
-							if(isset($this->multiframes[$i]))
-							{
-								$decoded = $this->multiframes[$i];
-							}
-						case(static::MESSAGE_TYPES['text']):
-						case(static::MESSAGE_TYPES['binary']):
-							$length = ord($rawBytes[1]) & 127;
-
-							if($length == 126)
-							{
-								$length = unpack('n', substr($rawBytes, 2, 2))[1];
-								$masks = substr($rawBytes, 4, 4);
-								$data = substr($rawBytes, 8);
-								\SeanMorris\Ids\Log::debug(sprintf(
-									'Message length %d, bytes got %d.'
-									, $length
-									, strlen($data)
-								));
-							}
-							else if($length == 127)
-							{
-								$length = unpack('J', substr($rawBytes, 2, 8))[1];
-								$masks = substr($rawBytes, 10, 4);
-								$data = substr($rawBytes, 14);
-								\SeanMorris\Ids\Log::debug(sprintf(
-									'Message length %d, bytes got %d.'
-									, $length
-									, strlen($data)
-								));
-							}
-							else
-							{
-								$masks = substr($rawBytes, 2, 4);
-								$data = substr($rawBytes, 6);
-								\SeanMorris\Ids\Log::debug(sprintf(
-									'Message length %d, bytes got %d.'
-									, $length
-									, strlen($data)
-								));
-							}
-
-							for ($ii = 0; $ii < $length; ++$ii)
-							{
-								if(!isset($data[$ii]))
-								{
-									\SeanMorris\Ids\Log::debug(sprintf(
-										'Deferring...'
-									));
-									$this->partials[$i] = [
-										$type, $data, $masks, $fin, $length
-									];
-									return FALSE;
-								}
-
-								$decoded .= $data[$ii] ^ $masks[$ii%4];
-							}
-
-							\SeanMorris\Ids\Log::debug($decoded);
-
-							if(!$fin)
-							{
-								if(!isset($this->multiframes[$i]))
-								{
-									$this->multiframes[$i] = '';
-								}
-
-								$this->multiframes[$i] .= $decoded;
-								continue 4;
-							}
-
-							$this->onReceive($type, $decoded, $client, $i);
-
-							$this->partials[$i] = NULL;
-
-							$this->multiframes[$i] = $decoded = '';
-
-							if($rawBytes = substr($data, $length))
-							{
-								$this->leftovers[$i] = $rawBytes;
-								continue 4;
-							}
-
-							break;
-						case(static::MESSAGE_TYPES['close']):
-							if($client)
-							{
-								$this->onDisconnect($client, $i);
-
-								unset( $this->clients[$i] );
-
-								fclose($client);
-
-							}
-							return FALSE;
-							break;
-						default:
-							\SeanMorris\Ids\Log::debug('Rejecting...');
-							if($client)
-							{
-								$this->onDisconnect($client, $i);
-
-								unset( $this->clients[$i] );
-
-								fclose($client);
-							}
-
-							return FALSE;
-							break;
-					}
-
-				}
+				continue;
 			}
-		}
 
-		if(!$this->hub)
-		{
-			$this->hub = new \SeanMorris\SubSpace\Kallisti\Hub;
+			$this->onReceive(
+				$message->type()
+				, $message->content()
+				, $producer
+				, $i
+			);
 		}
 
 		$this->hub->tick();
@@ -368,85 +155,19 @@ class Socket
 		return;
 	}
 
-	public function send($message, $client, $typeByte = 0x1)
-	{
-		// Send data to clients
-		// fwrite(STDERR, 'Sending ' . $message);
-
-		$length   = strlen($message);
-
-		$typeByte += 128;
-
-		if($length < 126)
-		{
-			$encoded = pack('CC', $typeByte, $length) . $message;
-		}
-		else if($length < 65536)
-		{
-			$encoded = pack('CCn', $typeByte, 126, $length) . $message;
-		}
-		else
-		{
-			$encoded = pack('CCNN', $typeByte, 127, 0, $length) . $message;
-		}
-
-		if(get_resource_type($client) == 'stream')
-		{
-			stream_set_blocking($client, TRUE);
-
-			fwrite($client, $encoded);
-
-			stream_set_blocking($client, FALSE);
-		}
-	}
-
-	protected function fin($message)
-	{
-		$type = ord($message[0]);
-
-		if($type >= 128)
-		{
-			return true;
-		}
-	}
-
-	protected function dataType($message)
-	{
-		$type = ord($message[0]);
-
-		if($type >= 128)
-		{
-			$type -= 128;
-		}
-
-		return $type;
-	}
-
-	/***********************************************/
-
-	protected
-		$userContext = []
-		, $hub       = NULL
-		, $agents    = [];
-
 	protected function onConnect($client, $clientIndex)
 	{
-		// fwrite(STDERR, sprintf("#%d joined.\n", $clientIndex));
+		\SeanMorris\Ids\Log::debug(sprintf("#%d joined.\n", $clientIndex));
 	}
 
 	protected function onDisconnect($client, $clientIndex)
 	{
-		fwrite(STDERR, sprintf("#%d left.\n", $clientIndex));
+		\SeanMorris\Ids\Log::debug(sprintf("#%d left.\n", $clientIndex));
 	}
 
 	protected function onReceive($type, $message, $client, $clientIndex)
 	{
 		$response = NULL;
-
-		if(!$this->hub)
-		{
-			$this->hub = new \SeanMorris\SubSpace\Kallisti\Hub;
-		}
 
 		if(!isset($this->agents[$clientIndex]))
 		{
@@ -461,83 +182,39 @@ class Socket
 
 			$this->hub->unsubscribe('*', $agent);
 
-			$agent->expose(function($content, $output, $origin, $channel, $originalChannel, $cc = NULL) use($client){
+			$agent->expose(function($content, $output, $origin, $channel, $originalChannel, $cc = NULL) use($client, $clientIndex){
 
-				if(is_numeric($channel->name) || preg_match('/^\d+-\d+$/', $channel->name))
+				if($content === NULL)
 				{
-					$typeByte = static::MESSAGE_TYPES['binary'];
-
-					$header = pack(
-						'vvv'
-						, $origin
-							? 1
-							: 0
-						, $origin
-							? $origin->id
-							: 0
-						, $channel->name
-					);
-
-					if(is_numeric($content))
-					{
-						if(is_int($content))
-						{
-							$content = pack('l', $content);
-						}
-						else if(is_float($content))
-						{
-							$content = pack('e', $content);
-						}
-					}
-
-					$outgoing = $header . $content;
-				}
-				else
-				{
-					$typeByte = static::MESSAGE_TYPES['text'];
-
-					$originType = NULL;
-
-					if(!$origin)
-					{
-						$originType = 'server';
-						$originId   = NULL;
-					}
-					else if($origin instanceof \SeanMorris\Kallisti\Agent)
-					{
-						$originType = 'user';
-						$originId   = $origin->id;
-					}
-
-					$message = [
-						'message'  => $content
-						, 'origin' => $originType
-					];
-
-					if(isset($originId))
-					{
-						$message['originId'] = $originId;
-					}
-
-					if(isset($channel))
-					{
-						$message['channel'] = $channel->name;
-
-						if(isset($originalChannel) && $channel !== $originalChannel)
-						{
-							$message['originalChannel'] = $originalChannel;
-						}
-					}
-
-					if(isset($cc))
-					{
-						$message['cc'] = $cc;
-					}
-
-					$outgoing = json_encode($message);
+					return;
 				}
 
-				$this->send($outgoing, $client, $typeByte);
+				$syndicated = static::$Message::assemble(
+					$origin
+					, $channel
+					, $content
+					, $originalChannel
+					, $cc
+				);
+
+				\SeanMorris\Ids\Log::debug(sprintf(
+					"<< %d[%d]: \"%s\"\n"
+					, $clientIndex
+					, $syndicated->type()
+					, print_r($content, 1)
+				));
+
+				try
+				{
+					$client->send($syndicated->content(), $syndicated->type());
+				}
+				catch (\Exception $exception)
+				{
+					\SeanMorris\Ids\Log::error($exception->getMessage());
+
+					unset($this->clients[$clientIndex]);
+				}
+
 			});
 
 			$this->userContext[$clientIndex] = [
@@ -545,7 +222,7 @@ class Socket
 				, '__hub'    => $this->hub
 				, '__agent'  => $agent
 				, '__authed' => FALSE
-				, '__remote' => stream_socket_get_name($client, TRUE)
+				, '__remote' => $client->name()
 				, '__uniqid' => uniqid()
 			];
 		}
@@ -554,7 +231,8 @@ class Socket
 
 		switch($type)
 		{
-			case(static::MESSAGE_TYPES['binary']):
+			case(static::$Message::TYPE['BINARY']):
+
 				if(isset($this->userContext[$clientIndex])
 					&& $this->userContext[$clientIndex]['__authed']
 				){
@@ -569,9 +247,12 @@ class Socket
 
 					$this->hub->publish($channelId, $finalMessage, $agent);
 				}
+
 				break;
-			case(static::MESSAGE_TYPES['text']):
-				fwrite(STDERR, sprintf(
+
+			case(static::$Message::TYPE['TEXT']):
+
+				\SeanMorris\Ids\Log::debug(sprintf(
 					">> %d[%d]: \"%s\"\n"
 					, $clientIndex
 					, $type
@@ -598,7 +279,7 @@ class Socket
 					$response = (string) $response;
 				}
 
-				fwrite(STDERR, sprintf(
+				\SeanMorris\Ids\Log::debug(sprintf(
 					"<< %d[%d]: \"%s\"\n"
 					, $clientIndex
 					, $type
@@ -610,24 +291,16 @@ class Socket
 
 		if(is_integer($response))
 		{
-			$this->send(
-				pack(
-					'vvvP'
-					, 0
-					, 0
-					, 0
-					, $response
-				)
-				, $client
-				, static::MESSAGE_TYPES['binary']
+			$client->send(
+				pack('vvvP', 0, 0, 0, $response)
+				, static::$Message::TYPE['BINARY']
 			);
 		}
 		else if($response !== NULL)
 		{
-			$this->send(
+			$client->send(
 				json_encode($response)
-				, $client
-				, static::MESSAGE_TYPES['text']
+				, static::$Message::TYPE['TEXT']
 			);
 		}
 	}
@@ -640,13 +313,13 @@ $errorHandler = set_error_handler(
 			return;
 		}
 
-		// fwrite(STDERR, sprintf(
-		// 	"[%d] '%s' in %s:%d\n"
-		// 	, $errCode
-		// 	, $message
-		// 	, $file
-		// 	, $line
-		// ));
+		\SeanMorris\Ids\Log::error(sprintf(
+			"[%d] '%s' in %s:%d\n"
+			, $errCode
+			, $message
+			, $file
+			, $line
+		));
 
 		if($errorHandler)
 		{

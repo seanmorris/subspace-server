@@ -131,6 +131,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 
 	/**
 	 * Send a message to one or more users on a given channel.
+	 * say CHANNEL_ID CC_COUNT CC_USER_ID[...] BCC_COUNT BCC_USER_ID[...] Message Bytes
 	 */
 	public function say($router)
 	{
@@ -141,7 +142,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		if(!$router->contextGet('__authed'))
 		{
 			return [
-				'error' => 'You need to auth before you can send.'
+				'error' => 'You need to auth before you can say.'
 			];
 		}
 
@@ -224,7 +225,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		$do .= $message;
 
 		return $hub->say(
-			$args[0]
+			$channelName
 			, $message
 			, $agent
 			, $recipients
@@ -270,7 +271,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		$args  = $router->path()->consumeNodes();
 		$hub   = $router->contextGet('__hub');
 		$agent = $router->contextGet('__agent');
-		
+
 		if(!$router->contextGet('__authed'))
 		{
 			return [
@@ -300,7 +301,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 
 		return ['subscriptions' => $channels];
 	}
-	
+
 	/**
 	 * Unsubscribe from a channel individually or by a selector.
 	 */
@@ -367,6 +368,45 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	}
 
 	/**
+	 * Get your user id.
+	 */
+	public function uid($router)
+	{
+		$clientId = $router->contextGet('__agent')->id;
+
+		return sprintf('0x%04x', $clientId);
+	}
+
+	/**
+	 * View your connection details.
+	 */
+	public function connection($router)
+	{
+		if(!$router->contextGet('__authed'))
+		{
+			return [
+				'error' => 'You need to auth before you can run "connection".'
+			];
+		}
+
+		$clientId = $router->contextGet('__agent')->id;
+		$uid      = sprintf('0x%04x', $clientId);
+		$remote   = $router->contextGet('__remote');
+		$parts    = explode(':', $remote);
+
+		return [
+			'address'  => $parts[0] ?? NULL
+			, 'uniqid' => $router->contextGet('__uniqid')
+			, 'uid'    => $uid
+			, 'jwt'    => (string) new \SeanMorris\SubSpace\JwtToken([
+				'time'      => microtime(TRUE)
+				, 'address' => $parts[0] ?? NULL
+				, 'uniqid'  => $router->contextGet('__uniqid')
+			])
+		];
+	}
+
+	/**
 	 * Lists available commands.
 	 */
 	public function commands()
@@ -402,29 +442,6 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 		return ['commands' => $_methods];
 	}
 
-	/**
-	 * View your connection details IP.
-	 */
-	public function connection($router)
-	{
-		if(!$router->contextGet('__authed'))
-		{
-			return [
-				'error' => 'You need to auth before you can run "connection".'
-			];
-		}
-
-		$remote = $router->contextGet('__remote');
-		$parts  = explode(':', $remote);
-
-		return [
-			'address'  => $parts[0] ?? NULL
-			, 'uniqid' => $router->contextGet('__uniqid')
-			, 'jwt'    => (string) new \SeanMorris\SubSpace\JwtToken([
-				'time'      => microtime(TRUE)
-				, 'address' => $parts[0] ?? NULL
-				, 'uniqid'  => $router->contextGet('__uniqid')
-			])
-		];
-	}
+	public function _tick($hub)
+	{}
 }
