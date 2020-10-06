@@ -10,7 +10,7 @@ class JwtToken
 
 	protected static function secret()
 	{
-		return 'override me.';
+		return \SeanMorris\Ids\Settings::read('jwtSecret');
 	}
 
 	public function __construct($content)

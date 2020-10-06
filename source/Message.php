@@ -34,15 +34,6 @@ class Message
 	const FRAME_LENGTH = 0x10000;
 	const TYPE_MASK    = 0x80;
 
-	const MESSAGE_TYPES  = [
-		'continuous' => 0
-		, 'text'     => 1
-		, 'binary'   => 2
-		, 'close'    => 8
-		, 'ping'     => 9
-		, 'pong'     => 10
-	];
-
 	public function __construct($id = NULL)
 	{
 		$this->id = $id;
@@ -52,7 +43,7 @@ class Message
 	{
 		if(is_numeric($channel->name) || preg_match('/^\d+-\d+$/', $channel->name))
 		{
-			$typeByte = static::MESSAGE_TYPES['binary'];
+			$typeByte = static::TYPE['BINARY'];
 
 			$static = new static;
 			$static->type = $typeByte;
@@ -77,7 +68,7 @@ class Message
 		}
 		else
 		{
-			$typeByte = static::MESSAGE_TYPES['text'];
+			$typeByte = static::TYPE['TEXT'];
 
 			$static = new static;
 			$static->type = $typeByte;

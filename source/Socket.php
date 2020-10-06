@@ -28,17 +28,17 @@ class Socket
 	{
 		$this->hub = new static::$Hub;
 
+		$socketSettings = \SeanMorris\Ids\Settings::read('websocket');
+
 		$passphrase = NULL;
 		$certFile   = NULL;
 		$keyFile    = NULL;
 		$keyPath    = NULL;
-		$address    = '0.0.0.0:9998';
-
-		$socketSettings = \SeanMorris\Ids\Settings::read('websocket');
+		$address    = 'localhost:9998';
 
 		if($socketSettings)
 		{
-			$address    = $socketSettings->listen ?? NULL;
+			$address    = $socketSettings->listen ?? $address;
 			$keyPath    = IDS_ROOT . '/data/local/certbot/';
 
 			$passphrase = $socketSettings->passphrase ?? NULL;
@@ -231,7 +231,7 @@ class Socket
 
 		switch($type)
 		{
-			case(static::$Message::MESSAGE_TYPES['binary']):
+			case(static::$Message::TYPE['BINARY']):
 
 				if(isset($this->userContext[$clientIndex])
 					&& $this->userContext[$clientIndex]['__authed']
@@ -250,7 +250,7 @@ class Socket
 
 				break;
 
-			case(static::$Message::MESSAGE_TYPES['text']):
+			case(static::$Message::TYPE['TEXT']):
 
 				\SeanMorris\Ids\Log::debug(sprintf(
 					">> %d[%d]: \"%s\"\n"
@@ -293,14 +293,14 @@ class Socket
 		{
 			$client->send(
 				pack('vvvP', 0, 0, 0, $response)
-				, static::$Message::MESSAGE_TYPES['binary']
+				, static::$Message::TYPE['BINARY']
 			);
 		}
 		else if($response !== NULL)
 		{
 			$client->send(
 				json_encode($response)
-				, static::$Message::MESSAGE_TYPES['text']
+				, static::$Message::TYPE['TEXT']
 			);
 		}
 	}
