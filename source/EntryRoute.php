@@ -441,4 +441,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 
 		return ['commands' => $_methods];
 	}
+
+	public function _tick($hub)
+	{}
 }

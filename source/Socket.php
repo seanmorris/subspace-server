@@ -19,6 +19,7 @@ class Socket
 		$socket
 		, $partials
 		, $userContext = []
+		, $crypto      = false
 		, $agents      = []
 		, $hub         = NULL
 	;
@@ -26,19 +27,14 @@ class Socket
 	public function __construct()
 	{
 		$this->hub = new static::$Hub;
-		// $this->localAgent = new \SeanMorris\Kallisti\Agent;
-		// $this->localAgent->register($this->hub);
-
-		// $keyFile    = '/etc/letsencrypt/live/example.com/privkey.pem';
-		// $chainFile  = '/etc/letsencrypt/live/example.com/chain.pem';
-
-		$socketSettings = \SeanMorris\Ids\Settings::read('websocket');
 
 		$passphrase = NULL;
 		$certFile   = NULL;
 		$keyFile    = NULL;
 		$keyPath    = NULL;
 		$address    = '0.0.0.0:9998';
+
+		$socketSettings = \SeanMorris\Ids\Settings::read('websocket');
 
 		if($socketSettings)
 		{
@@ -54,14 +50,16 @@ class Socket
 
 		if($keyFile && $certFile)
 		{
-			// $contextOptions = [
-			// 	'ssl'=>[
-			// 		'local_cert'    => $keyPath . $certFile
-			// 		, 'local_pk'    => $keyPath . $keyFile
-			// 		, 'passphrase'  => $passphrase
-			// 		, 'verify_peer' => FALSE
-			// 	]
-			// ];
+			$contextOptions = [
+				'ssl'=>[
+					'local_cert'    => $keyPath . $certFile
+					, 'local_pk'    => $keyPath . $keyFile
+					, 'passphrase'  => $passphrase
+					, 'verify_peer' => FALSE
+				]
+			];
+
+			$this->crypto = TRUE;
 		}
 
 		$context = stream_context_create($contextOptions);
@@ -84,24 +82,27 @@ class Socket
 
 	public function tick()
 	{
-		if($newStream = stream_socket_accept($this->socket, 0))
+		if($newSocket = stream_socket_accept($this->socket, 0))
 		{
-			// stream_set_blocking($newStream, TRUE);
+			stream_set_blocking($newSocket, TRUE);
 
-			// stream_socket_enable_crypto(
-			// 	$newStream
-			// 	, TRUE
-			// 	, STREAM_CRYPTO_METHOD_SSLv23_SERVER
-			// );
+			if($this->crypto)
+			{
+				stream_socket_enable_crypto(
+					$newSocket
+					, TRUE
+					, STREAM_CRYPTO_METHOD_SSLv23_SERVER
+				);
+			}
 
-			$incomingHeaders = fread($newStream, 2**16);
+			$incomingHeaders = fread($newSocket, 2**16);
 
 			if(preg_match('#^Sec-WebSocket-Key: (\S+)#mi', $incomingHeaders, $match))
 			{
-				stream_set_blocking($newStream, FALSE);
+				stream_set_blocking($newSocket, FALSE);
 
 				fwrite(
-					$newStream
+					$newSocket
 					, "HTTP/1.1 101 Switching Protocols\r\n"
 						. "Upgrade: websocket\r\n"
 						. "Connection: Upgrade\r\n"
@@ -114,7 +115,7 @@ class Socket
 						. "\r\n\r\n"
 				);
 
-				$producer = new static::$Producer($newStream);
+				$producer = new static::$Producer($newSocket);
 				$pIndex   = count($this->producers);
 
 				$this->producers[$pIndex] = $producer;
@@ -123,7 +124,7 @@ class Socket
 			}
 			else
 			{
-				stream_socket_shutdown($newStream, STREAM_SHUT_RDWR);
+				stream_socket_shutdown($newSocket, STREAM_SHUT_RDWR);
 			}
 		}
 

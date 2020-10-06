@@ -21,7 +21,6 @@ class RootRoute implements \SeanMorris\Ids\Routable
 
 		while(true)
 		{
-			// usleep( 1000000 / static::FREQUENCY );
 			usleep(1000 * static::FREQUENCY);
 
 			$socket->tick();

@@ -8,7 +8,6 @@ class Message
 		, $leftover = null
 		, $decoded  = null
 		, $encoded  = null
-		, $content  = null
 		, $length   = 0
 		, $type     = null
 		, $fin      = false
@@ -383,7 +382,7 @@ class Message
 
 	public function encode($content = NULL, $typeByte = NULL)
 	{
-		$content  = $content  ?? $this->content  ?? NULL;
+		$content  = $content  ?? $this->decoded  ?? NULL;
 		$typeByte = $typeByte ?? $this->typeByte ?? 0x1;
 
 		$this->length = strlen($content);
