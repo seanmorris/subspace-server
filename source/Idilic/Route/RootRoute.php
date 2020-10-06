@@ -6,7 +6,7 @@ use \SeanMorris\SubSpace\MessageProducer;
 
 class RootRoute implements \SeanMorris\Ids\Routable
 {
-	const FREQUENCY = 250;
+	const INTERVAL = 1000 * 250;
 
 	public function compa($router)
 	{
@@ -21,7 +21,7 @@ class RootRoute implements \SeanMorris\Ids\Routable
 
 		while(true)
 		{
-			usleep(1000 * static::FREQUENCY);
+			usleep(static::INTERVAL);
 
 			$socket->tick();
 		}
