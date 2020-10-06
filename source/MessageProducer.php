@@ -50,8 +50,6 @@ class MessageProducer implements \Iterator
 
 			$this->current->decode($chunk);
 		}
-
-		// $this->done = true;
 	}
 
 	public function done()
