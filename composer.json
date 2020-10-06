@@ -13,7 +13,7 @@
         "seanmorris/form": "dev-master",
         "seanmorris/message": "dev-master",
         "seanmorris/presskit": "dev-master",
-        "seanmorris/Kallisti": "dev-master"
+        "seanmorris/kallisti": "dev-master"
     },
     "require-dev": {
         "simpletest/simpletest": "dev-master"
