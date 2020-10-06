@@ -1,6 +1,7 @@
 {
     "name": "seanmorris/subspace",
     "description": "Kallisti websocket server.",
+    "license": "Apache-2.0",
     "authors": [
         {
             "name": "Sean Morris",
