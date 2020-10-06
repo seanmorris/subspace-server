@@ -5,10 +5,12 @@ use \SeanMorris\Subspace\Message;
 
 class MessageProducer implements \Iterator
 {
+	static $Message = \SeanMorris\Subspace\Message::Class;
+
 	public function __construct($socket)
 	{
 		$this->index   = 0;
-		$this->current = new \SeanMorris\SubSpace\Message($this->index);
+		$this->current = new static::$Message($this->index);
 		$this->socket  = $socket;
 		$this->done    = false;
 
@@ -27,7 +29,7 @@ class MessageProducer implements \Iterator
 
 				$current = $this->current;
 
-				$this->current = new \SeanMorris\SubSpace\Message($this->index);
+				$this->current = new static::$Message($this->index);
 
 				return $current;
 			}

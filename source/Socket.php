@@ -64,8 +64,6 @@ class Socket
 			// ];
 		}
 
-		\SeanMorris\Ids\Log::error($contextOptions);
-
 		$context = stream_context_create($contextOptions);
 
 		\SeanMorris\Ids\Log::debug(sprintf(
