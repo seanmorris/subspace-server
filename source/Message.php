@@ -4,14 +4,17 @@ namespace SeanMorris\SubSpace;
 class Message
 {
 	protected
-		$leftover   = null
+		$id         = null
+		, $leftover = null
 		, $decoded  = null
 		, $encoded  = null
+		, $content  = null
 		, $length   = 0
 		, $type     = null
 		, $fin      = false
 		, $rawFrame = null
 		, $masks    = null
+		, $typeByte = null
 	;
 
 	const TYPE = [
@@ -32,13 +35,105 @@ class Message
 	const FRAME_LENGTH = 0x10000;
 	const TYPE_MASK    = 0x80;
 
-	public static function enc($input)
+	const MESSAGE_TYPES  = [
+		'continuous' => 0
+		, 'text'     => 1
+		, 'binary'   => 2
+		, 'close'    => 8
+		, 'ping'     => 9
+		, 'pong'     => 10
+	];
+
+	public function __construct($id = NULL)
+	{
+		$this->id = $id;
+	}
+
+	public static function assemble($origin, $channel, $content, $originalChannel = NULL, $cc = [])
+	{
+		if(is_numeric($channel->name) || preg_match('/^\d+-\d+$/', $channel->name))
+		{
+			$typeByte = static::MESSAGE_TYPES['binary'];
+
+			$static = new static;
+			$static->type = $typeByte;
+
+			$header = pack(
+				'vvv'
+				, $origin ? 1 : 0
+				, $origin ? $origin->id : 0
+				, $channel->name
+			);
+
+			if(is_int($content))
+			{
+				$content = pack('l', $content);
+			}
+			else if(is_float($content))
+			{
+				$content = pack('e', $content);
+			}
+
+			$outgoing = $header . $content;
+		}
+		else
+		{
+			$typeByte = static::MESSAGE_TYPES['text'];
+
+			$static = new static;
+			$static->type = $typeByte;
+
+			$originType = NULL;
+
+			if(!$origin)
+			{
+				$originType = 'server';
+				$originId   = NULL;
+			}
+			else if($origin instanceof \SeanMorris\Kallisti\Agent)
+			{
+				$originType = 'user';
+				$originId   = $origin->id;
+			}
+
+			$message = ['message' => $content, 'origin' => $originType];
+
+			if(isset($originId))
+			{
+				$message['originId'] = $originId;
+			}
+
+			if(isset($channel))
+			{
+				$message['channel'] = $channel->name;
+
+				if(isset($originalChannel) && $channel !== $originalChannel)
+				{
+					$message['originalChannel'] = $originalChannel;
+				}
+			}
+
+			if(isset($cc))
+			{
+				$message['cc'] = $cc;
+			}
+
+			$outgoing = json_encode($message);
+		}
+
+		$static->decoded = $outgoing;
+		$static->fin     = true;
+
+		return $static;
+	}
+
+	public static function enc($input, $type = NULL)
 	{
 		$message = new static;
 
-		$message->encode($input);
+		$message->encode($input, $type);
 
-		print $message->encoded;
+		return $message->encoded;
 	}
 
 	public static function dec($input)
@@ -47,7 +142,7 @@ class Message
 
 		$message->decode($input);
 
-		print $message->decoded;
+		return $message->decoded;
 	}
 
 	public static function hex($input)
@@ -55,133 +150,135 @@ class Message
 		print join(' ', unpack('C*', $input));
 	}
 
+	public function type()
+	{
+		return $this->type;
+	}
+
 	public function decode($rawBytes)
 	{
-		while($rawBytes)
+		\SeanMorris\Ids\Log::debug($rawBytes);
+
+		if(strlen($this->decoded))
 		{
-			\SeanMorris\Ids\Log::debug($rawBytes);
+			$this->continueDecoding($rawBytes);
+			return;
+		}
 
-			if(strlen($this->decoded))
-			{
-				$this->continueDecoding($rawBytes);
-				continue;
-			}
+		$this->fin  = $this->fin($rawBytes);
+		$this->type = $this->dataType($rawBytes);
 
-			$this->fin  = $this->fin($rawBytes);
-			$this->type = $this->dataType($rawBytes);
+		switch($this->type)
+		{
+			case(static::TYPE['PING']):
 
-			switch($this->type)
-			{
-				case(static::TYPE['PING']):
+				\SeanMorris\Ids\Log::debug('Type', 'Received a PING!');
+				break;
 
-					\SeanMorris\Ids\Log::debug('Type', 'Received a PING!');
-					break;
+			case(static::TYPE['PONG']):
 
-				case(static::TYPE['PONG']):
+				\SeanMorris\Ids\Log::debug('Type', 'Received a PONG!');
+				break;
 
-					\SeanMorris\Ids\Log::debug('Type', 'Received a PONG!');
-					break;
+			case(static::TYPE['CLOSE']):
 
-				case(static::TYPE['CLOSE']):
+				\SeanMorris\Ids\Log::debug('Type', 'Received a CLOSE MESSAGE!');
+				break;
 
-					\SeanMorris\Ids\Log::debug('Type', 'Received a CLOSE MESSAGE!');
-					break;
+			case(static::TYPE['TEXT']):
+			case(static::TYPE['BINARY']):
+			case(static::TYPE['CONTINUE']):
 
-				case(static::TYPE['TEXT']):
-				case(static::TYPE['BINARY']):
-				case(static::TYPE['CONTINUE']):
+				$this->masked = ord($rawBytes[1]) & 0b10000000;
+				$this->length = ord($rawBytes[1]) & 0b01111111;
 
-					$this->masked = ord($rawBytes[1]) & 0b10000000;
-					$this->length = ord($rawBytes[1]) & 0b01111111;
+				if($this->length == 0x7E)
+				{
+					$this->length   = unpack('n', substr($rawBytes, 2, 2))[1];
+					$this->masks    = substr($rawBytes, 4, 4);
+					$this->rawFrame = substr($rawBytes, 8);
 
-					if($this->length == 0x7E)
+					\SeanMorris\Ids\Log::debug(sprintf(
+						'Message length %d, got %d bytes.'
+						, $this->length
+						, strlen($this->rawFrame)
+					));
+				}
+				else if($this->length == 0x7F)
+				{
+					$this->length   = unpack('J', substr($rawBytes, 2, 8))[1];
+					$this->masks    = substr($rawBytes, 10, 4);
+					$this->rawFrame = substr($rawBytes, 14);
+
+					\SeanMorris\Ids\Log::debug(sprintf(
+						'Message length %d, got %d bytes.'
+						, $this->length
+						, strlen($this->rawFrame)
+					));
+				}
+				else
+				{
+					$this->masks    = substr($rawBytes, 2, 4);
+					$this->rawFrame = substr($rawBytes, 6);
+
+					\SeanMorris\Ids\Log::debug(sprintf(
+						'Message length %d, got %d bytes.'
+						, $this->length
+						, strlen($this->rawFrame)
+					));
+				}
+
+				if(!$this->masked)
+				{
+					$this->rawFrame = $this->masks . $this->rawFrame;
+				}
+
+				for ($i = 0; $i < $this->length; ++$i)
+				{
+					if(!isset($this->rawFrame[$i]))
 					{
-						$this->length   = unpack('n', substr($rawBytes, 2, 2))[1];
-						$this->masks    = substr($rawBytes, 4, 4);
-						$this->rawFrame = substr($rawBytes, 8);
-
 						\SeanMorris\Ids\Log::debug(sprintf(
-							'Message length %d, got %d bytes.'
+							'Message length %d, Got %d bytes. Message DEFERRED due to WAITING FOR FRAME END.'
 							, $this->length
 							, strlen($this->rawFrame)
 						));
-					}
-					else if($this->length == 0x7F)
-					{
-						$this->length   = unpack('J', substr($rawBytes, 2, 8))[1];
-						$this->masks    = substr($rawBytes, 10, 4);
-						$this->rawFrame = substr($rawBytes, 14);
 
-						\SeanMorris\Ids\Log::debug(sprintf(
-							'Message length %d, got %d bytes.'
-							, $this->length
-							, strlen($this->rawFrame)
-						));
-					}
-					else
-					{
-						$this->masks    = substr($rawBytes, 2, 4);
-						$this->rawFrame = substr($rawBytes, 6);
-
-						\SeanMorris\Ids\Log::debug(sprintf(
-							'Message length %d, got %d bytes.'
-							, $this->length
-							, strlen($this->rawFrame)
-						));
-					}
-
-					if(!$this->masked)
-					{
-						$this->rawFrame = $this->masks . $this->rawFrame;
-					}
-
-					for ($i = 0; $i < $this->length; ++$i)
-					{
-						if(!isset($this->rawFrame[$i]))
-						{
-							\SeanMorris\Ids\Log::debug(sprintf(
-								'Message length %d, Got %d bytes. Message DEFERRED due to WAITING FOR FRAME END.'
-								, $this->length
-								, strlen($this->rawFrame)
-							));
-
-							return;
-						}
-
-						if($this->masked)
-						{
-							$this->decoded .= $this->rawFrame[$i] ^ $this->masks[$i%4];
-						}
-						else
-						{
-							$this->decoded .= $this->rawFrame[$i];
-						}
-					}
-
-					\SeanMorris\Ids\Log::debug($this->decoded);
-
-					if(!$this->fin)
-					{
 						return;
 					}
 
-					if($rawBytes = substr($this->rawFrame, $this->length))
+					if($this->masked)
 					{
-						$this->leftover = $rawBytes;
+						$this->decoded .= $this->rawFrame[$i] ^ $this->masks[$i%4];
 					}
+					else
+					{
+						$this->decoded .= $this->rawFrame[$i];
+					}
+				}
 
-					break;
+				\SeanMorris\Ids\Log::debug($this->decoded);
 
-				default:
-					\SeanMorris\Ids\Log::debug('REJECTION...');
+				if(!$this->fin)
+				{
+					return;
+				}
 
-					throw new \UnexpectedValueException(sprintf(
-						'Unexpected Websocket Frame Type: %d'
-						, $this->type
-					));
+				if($rawBytes = substr($this->rawFrame, $this->length))
+				{
+					$this->leftover = $rawBytes;
+				}
 
-					break;
-			}
+				break;
+
+			default:
+				\SeanMorris\Ids\Log::debug('REJECTION...');
+
+				throw new \UnexpectedValueException(sprintf(
+					'Unexpected Websocket Frame Type: %d'
+					, $this->type
+				));
+
+				break;
 		}
 
 		return $this->decoded;
@@ -284,8 +381,11 @@ class Message
 		return $type;
 	}
 
-	public function encode($content, $typeByte = 0x1)
+	public function encode($content = NULL, $typeByte = NULL)
 	{
+		$content  = $content  ?? $this->content  ?? NULL;
+		$typeByte = $typeByte ?? $this->typeByte ?? 0x1;
+
 		$this->length = strlen($content);
 
 		$this->type = $typeByte;
@@ -307,5 +407,15 @@ class Message
 		}
 
 		return $this->encoded;
+	}
+
+	public function encoded()
+	{
+		return $this->encoded;
+	}
+
+	public function leftover()
+	{
+		return $this->leftover;
 	}
 }

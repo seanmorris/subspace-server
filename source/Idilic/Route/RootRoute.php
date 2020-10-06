@@ -1,8 +1,12 @@
 <?php
 namespace SeanMorris\SubSpace\Idilic\Route;
+
+use \MultipleIterator, \NoRewindIterator, \RecursiveIteratorIterator;
+use \SeanMorris\SubSpace\MessageProducer;
+
 class RootRoute implements \SeanMorris\Ids\Routable
 {
-	const FREQUENCY = 120;
+	const FREQUENCY = 250;
 
 	public function compa($router)
 	{
@@ -17,22 +21,109 @@ class RootRoute implements \SeanMorris\Ids\Routable
 
 		while(true)
 		{
-			usleep( 1000000 / static::FREQUENCY );
+			// usleep( 1000000 / static::FREQUENCY );
+			usleep(1000 * static::FREQUENCY);
 
 			$socket->tick();
 		}
 	}
 
-	public function kpub($router)
+	public function klmpd($router)
 	{
-		$hostname = 'localhost:9998';
+		$defaults  = ['localhost:9998', 0];
 
-		$server  = 'tcp://' . $hostname;
+		$args      = $router->path()->consumeNodes();
 
+		[$authority, $channel] = $args + $defaults;
+
+		$address = 'tcp://' . $authority;
+		$timeout = 1;
 		$errno   = 0;
 		$error   = '';
-		$timeout = 1;
 		$flags   = STREAM_CLIENT_CONNECT;
+
+		$socket = stream_socket_client(
+			$address
+			, $errno
+			, $error
+			, $timeout
+			, $flags
+		);
+
+		if(!$socket)
+		{
+			throw new \Exception(sprintf(
+				'Could not connect to %s. Error #%d (%s)'
+				, $errno
+				, $error
+			));
+		}
+
+		stream_set_write_buffer($socket, 0);
+		stream_set_read_buffer($socket, 0);
+
+		fwrite($socket, implode("\r\n", [
+			'GET / HTTP/1.1'
+			, 'Host: ' . $authority
+			, 'Upgrade: WebSocket'
+			, 'Connection: Upgrade'
+			, 'Sec-WebSocket-Key: '  . bin2hex(random_bytes(16))
+			, 'Sec-WebSocket-Version: 13'
+		]) . "\r\n");
+
+		while($connectResponse = fread($socket, 2048))
+		{
+			if($connectResponse)
+			{
+				fwrite(STDERR, $connectResponse);
+				break;
+			}
+		}
+
+		$send = new \SeanMorris\SubSpace\Message();
+
+		fwrite($socket, $send->encode('auth ' . (string) new \SeanMorris\SubSpace\JwtToken([
+			'time'  => microtime(TRUE)
+			, 'uid' => -1
+		])));
+
+		stream_set_blocking($socket, FALSE);
+
+		$producer1 = new MessageProducer($socket);
+		$producer1->subscribe(1);
+
+		$multiple  = new MultipleIterator(MultipleIterator::MIT_NEED_ANY | MultipleIterator::MIT_KEYS_NUMERIC);
+
+		$multiple->attachIterator($producer1);
+
+		foreach($multiple as $key => $messages)
+		{
+			if($key === NULL)
+			{
+				continue;
+			}
+
+			if(!$messages = array_filter($messages))
+			{
+				continue;
+			}
+
+			var_dump($messages);
+		}
+	}
+
+	public function klpub($router)
+	{
+		$args     = $router->path()->consumeNodes();
+		$defaults = ['localhost:9998', 0];
+
+		[$hostname, $channel] = $args + $defaults;
+
+		$server   = 'tcp://' . $hostname;
+		$errno    = 0;
+		$error    = '';
+		$timeout  = 1;
+		$flags    = STREAM_CLIENT_CONNECT;
 
 		$socket = stream_socket_client($server, $errno, $error, $timeout, $flags);
 
@@ -71,24 +162,26 @@ class RootRoute implements \SeanMorris\Ids\Routable
 		while($input = fgets(STDIN))
 		{
 			$send = new \SeanMorris\SubSpace\Message();
-			fwrite($socket, $send->encode('pub 0 ' . $input));
+			fwrite($socket, $send->encode(implode(' ', ['pub', $channel, $input])));
 		}
 
 		fclose($socket);
 	}
 
-	public function ksub()
+	public function klsub($router)
 	{
-		$hostname = 'localhost:9998';
+		$args     = $router->path()->consumeNodes();
+		$defaults = ['localhost:9998', 0];
 
-		$server  = 'tcp://' . $hostname;
+		[$hostname, $channel] = $args + $defaults;
 
-		$errno   = 0;
-		$error   = '';
-		$timeout = 1;
-		$flags   = STREAM_CLIENT_CONNECT;
+		$address  = 'tcp://' . $hostname;
+		$errno    = 0;
+		$error    = '';
+		$timeout  = 1;
+		$flags    = STREAM_CLIENT_CONNECT;
 
-		$socket = stream_socket_client($server, $errno, $error, $timeout, $flags);
+		$socket = stream_socket_client($address, $errno, $error, $timeout, $flags);
 
 		if(!$socket)
 		{
@@ -102,16 +195,19 @@ class RootRoute implements \SeanMorris\Ids\Routable
 		stream_set_write_buffer($socket, 0);
 		stream_set_read_buffer($socket, 0);
 
-		fwrite($socket
-			, "GET / HTTP/1.1"    ."\r\n".
-				"Host: " . $hostname ."\r\n".
-				"Upgrade: WebSocket"   ."\r\n".
-				"Connection: Upgrade"  ."\r\n".
-				"Sec-WebSocket-Key: "  . bin2hex(random_bytes(16)) ."\r\n".
-				"Sec-WebSocket-Version: 13" ."\r\n"."\r\n"
-	    );
+		fwrite(
+			$socket
+			, implode("\r\n", [
+				'GET / HTTP/1.1'
+				, 'Host: ' . $hostname
+				, 'Upgrade: WebSocket'
+				, 'Connection: Upgrade'
+				, 'Sec-WebSocket-Key: '  . bin2hex(random_bytes(16))
+				, 'Sec-WebSocket-Version: 13'
+			]) . "\r\n"
+		);
 
-	    echo fread($socket, 1024);
+	    $headers = fread($socket, 1024);
 
 	    $send = new \SeanMorris\SubSpace\Message();
 
@@ -120,10 +216,14 @@ class RootRoute implements \SeanMorris\Ids\Routable
 			, 'uid' => -1
 		])));
 
+		$authResponse = fread($socket, 2048);
+
+		fwrite(STDERR, $authResponse);
+
 		$recv = new \SeanMorris\SubSpace\Message();
 
 		$send = new \SeanMorris\SubSpace\Message();
-		fwrite($socket, $send->encode('sub 0'));
+		fwrite($socket, $send->encode('sub ' . $channel));
 
 		while (!feof($socket))
 		{
