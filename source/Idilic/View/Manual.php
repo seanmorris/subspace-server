@@ -5,7 +5,7 @@ class Manual extends \SeanMorris\Theme\View
 }
 __halt_compiler(); ?>
 SubSpace Console 0.29a - Kallisti Websockets Playground
-©2018 Sean Morris
+©2018-2021 Sean Morris
 
 Local Commands:
 Local commands begin with a "/", like /login or /pub

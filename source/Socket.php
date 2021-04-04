@@ -18,6 +18,7 @@ class Socket
 	protected
 		$socket
 		, $partials
+		, $producers   = []
 		, $userContext = []
 		, $crypto      = false
 		, $agents      = []
@@ -76,8 +77,6 @@ class Socket
 			, STREAM_SERVER_BIND|STREAM_SERVER_LISTEN
 			, $context
 		);
-
-		$this->producers = [];
 	}
 
 	public function tick()
@@ -135,19 +134,19 @@ class Socket
 				continue;
 			}
 
-			$message = $producer->check();
-
-			if($message === NULL)
+			if($message = $producer->check())
 			{
+				\SeanMorris\Ids\Log::debug($message->__debugInfo());
+
+				$this->onReceive(
+					$message->type()
+					, $message->content()
+					, $producer
+					, $i
+				);
+
 				continue;
 			}
-
-			$this->onReceive(
-				$message->type()
-				, $message->content()
-				, $producer
-				, $i
-			);
 		}
 
 		$this->hub->tick();
@@ -197,24 +196,29 @@ class Socket
 					, $cc
 				);
 
+				// $encoded = $syndicated->encode(
+				// 	$content
+				// 	, is_numeric($channel->name)
+				// 		? static::$Message::TYPE['BINARY']
+				// 		: static::$Message::TYPE['TEXT']
+				// );
+
 				\SeanMorris\Ids\Log::debug(sprintf(
-					"<< %d[%d]: \"%s\"\n"
+					"<< %d: { %s bytes } \n"
 					, $clientIndex
-					, $syndicated->type()
-					, print_r($content, 1)
+					, strlen($syndicated->encoded())
 				));
 
 				try
 				{
-					$client->send($syndicated->content(), $syndicated->type());
+					$client->send($syndicated->encoded());
 				}
 				catch (\Exception $exception)
 				{
 					\SeanMorris\Ids\Log::error($exception->getMessage());
 
-					unset($this->clients[$clientIndex]);
+					unset($this->producers[$clientIndex]);
 				}
-
 			});
 
 			$this->userContext[$clientIndex] = [
@@ -289,19 +293,19 @@ class Socket
 				break;
 		}
 
+		$message = new static::$Message;
+
 		if(is_integer($response))
 		{
-			$client->send(
-				pack('vvvP', 0, 0, 0, $response)
-				, static::$Message::TYPE['BINARY']
-			);
+			$encoded = $message->encode(pack('vvvP', 0, 0, 0, $response), static::$Message::TYPE['BINARY']);
+
+			$client->send($encoded);
 		}
 		else if($response !== NULL)
 		{
-			$client->send(
-				json_encode($response)
-				, static::$Message::TYPE['TEXT']
-			);
+			$encoded = $message->encode(json_encode($response), static::$Message::TYPE['TEXT']);
+
+			$client->send($encoded);
 		}
 	}
 }

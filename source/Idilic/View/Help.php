@@ -5,11 +5,11 @@ class Help extends \SeanMorris\Theme\View
 }
 __halt_compiler(); ?>
 SubSpace Console 0.29a - Kallisti Websockets Playground
-©2018 Sean Morris
+©2018-2021 Sean Morris
 Type 'commmands' for a list of commands.
 
 Channels:
-If you're subscribed to a channel, you'll receive a 
+If you're subscribed to a channel, you'll receive a
 message if *any user* publishes a message on it.
 
 Test it out:

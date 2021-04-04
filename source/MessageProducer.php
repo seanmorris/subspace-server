@@ -1,11 +1,9 @@
 <?php
 namespace SeanMorris\SubSpace;
 
-use \SeanMorris\Subspace\Message;
-
 class MessageProducer implements \Iterator
 {
-	static $Message = \SeanMorris\Subspace\Message::Class;
+	static $Message = Message::Class;
 
 	public function __construct($socket)
 	{
@@ -19,21 +17,26 @@ class MessageProducer implements \Iterator
 
 	public function check()
 	{
+		if($this->current->content() && $this->current->isDone())
+		{
+			$current = $this->current;
+
+			$this->leftovers = $current->leftover();
+
+			\SeanMorris\Ids\Log::debug(sprintf(
+				'Carrying %d leftover bytes...'
+				, strlen($this->leftovers))
+			);
+
+			$this->index++;
+
+			$this->current = new static::$Message($this->index);
+
+			return $current;
+		}
+
 		while(!feof($this->socket))
 		{
-			if($this->current->isDone())
-			{
-				$this->leftovers = $this->current->leftover();
-
-				$this->index++;
-
-				$current = $this->current;
-
-				$this->current = new static::$Message($this->index);
-
-				return $current;
-			}
-
 			$chunk = fread($this->socket, 2**16);
 
 			if($this->leftovers)
@@ -60,23 +63,14 @@ class MessageProducer implements \Iterator
 
 	public function send($raw, $type = NULL)
 	{
-		$encoded = Message::enc($raw, $type);
-
 		stream_set_blocking($this->socket, TRUE);
-		fwrite($this->socket, $encoded);
+		fwrite($this->socket, $raw);
 		stream_set_blocking($this->socket, FALSE);
 	}
 
 	public function name()
 	{
 		return stream_socket_get_name($this->socket, TRUE);
-	}
-
-	public function subscribe($channel)
-	{
-		stream_set_blocking($client, TRUE);
-		fwrite($this->socket, Message::enc('sub ' . $channel));
-		stream_set_blocking($client, FALSE);
 	}
 
 	public function current()
