@@ -372,7 +372,6 @@ class Frame
 
 	public function __debugInfo()
 	{
-
 		$info = (object) [];
 
 		foreach($this as $prop => $val)
@@ -387,7 +386,7 @@ class Frame
 
 		unset($info->message);
 
-        return $info;
+        return (array) $info;
     }
 
 	public function isDone()

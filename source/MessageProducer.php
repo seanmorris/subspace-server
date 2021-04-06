@@ -5,18 +5,56 @@ class MessageProducer implements \Iterator
 {
 	static $Message = Message::Class;
 
-	public function __construct($socket)
+	protected $id, $count, $socket, $done, $current;
+
+	public function __construct($socket, $id)
 	{
-		$this->index   = 0;
-		$this->current = new static::$Message($this->index);
+		$this->id      = $id;
 		$this->socket  = $socket;
+		$this->count   = 0;
 		$this->done    = false;
+		$this->current = new static::$Message(null, null, $this->count);
+
+		$this->socketId = (int) $socket;
 
 		$this->leftovers = '';
 	}
 
 	public function check()
 	{
+		$chunk = fread($this->socket, 2**16);
+
+		if($this->leftovers)
+		{
+			$chunk = $this->leftovers . $chunk;
+
+			$this->leftovers = NULL;
+		}
+
+		if(!strlen($chunk))
+		{
+			return;
+		}
+
+		try
+		{
+			$this->current->decode($chunk);
+		}
+		catch(\Exception $error)
+		{
+			\SeanMorris\Ids\Log::logException($error);
+
+			$this->done = true;
+
+			$this->current = null;
+
+			$this->done = true;
+
+			fclose($this->socket);
+
+			return;
+		}
+
 		if($this->current->content() && $this->current->isDone())
 		{
 			$current = $this->current;
@@ -28,30 +66,11 @@ class MessageProducer implements \Iterator
 				, strlen($this->leftovers))
 			);
 
-			$this->index++;
+			$this->count++;
 
-			$this->current = new static::$Message($this->index);
+			$this->current = new static::$Message(null, null, $this->count);
 
 			return $current;
-		}
-
-		while(!feof($this->socket))
-		{
-			$chunk = fread($this->socket, 2**16);
-
-			if($this->leftovers)
-			{
-				$chunk = $this->leftovers . $chunk;
-
-				$this->leftovers = NULL;
-			}
-
-			if(!strlen($chunk))
-			{
-				return NULL;
-			}
-
-			$this->current->decode($chunk);
 		}
 	}
 
@@ -60,10 +79,18 @@ class MessageProducer implements \Iterator
 		return $this->done;
 	}
 
+	public function id()
+	{
+		return $this->id;
+	}
+
+	public function socketId()
+	{
+		return $this->socketId;
+	}
+
 	public function send($raw, $type = NULL)
 	{
-		stream_set_blocking($this->socket, TRUE);
-
 		if($this->done)
 		{
 			\SeanMorris\Ids\Log::warn('Writing to disconnected client!');
@@ -78,10 +105,8 @@ class MessageProducer implements \Iterator
 		}
 		else
 		{
-			fflush($this->socket);
-			stream_set_blocking($this->socket, FALSE);
+			// fflush($this->socket);
 		}
-
 	}
 
 	public function name()
@@ -94,8 +119,8 @@ class MessageProducer implements \Iterator
 		return $this->check();
 	}
 
-	public function key()   { return $this->index; }
-	public function valid() { return $this->done; }
+	public function key()   { return $this->count; }
+	public function valid() { return !$this->done; }
+	public function next()  { return $this->check(); }
 	public function rewind(){}
-	public function next()  {}
 }

@@ -6,10 +6,11 @@ class Message
 	static $Frame = Frame::Class;
 
 	protected
-		$id        = null
-		, $decoded = null
-	 	, $encoded = null
-	 	, $frames  = []
+		$id         = null
+		, $decoded  = null
+	 	, $encoded  = null
+	 	, $frames   = []
+		, $typeByte = null
 	;
 
 	const TYPE = [
@@ -31,9 +32,11 @@ class Message
 	const FRAME_LENGTH = 0x10000;
 	const TYPE_MASK    = 0x80;
 
-	public function __construct($id = NULL)
+	public function __construct($content = NULL, $type = NULL, $id = NULL)
 	{
-		$this->id = $id;
+		$this->decoded  = $content;
+		$this->typeByte = $type;
+		$this->id       = $id;
 	}
 
 	public function decode($rawBytes)
@@ -281,6 +284,6 @@ class Message
 			$info->frames[$i] = $frame->{__FUNCTION__}();
 		}
 
-        return $info;
+        return (array) $info;
     }
 }

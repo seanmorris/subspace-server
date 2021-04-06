@@ -17,6 +17,7 @@ class RootRoute implements \SeanMorris\Ids\Routable
 
 	public function server()
 	{
+		// $socket = new \SeanMorris\SubSpace\SocketServer;
 		$socket = new \SeanMorris\SubSpace\Socket;
 
 		while(true)
@@ -79,36 +80,117 @@ class RootRoute implements \SeanMorris\Ids\Routable
 			}
 		}
 
-		$send = new \SeanMorris\SubSpace\Message();
-
-		fwrite($socket, $send->encode('auth ' . (string) new \SeanMorris\SubSpace\JwtToken([
-			'time'  => microtime(TRUE)
-			, 'uid' => -1
-		])));
+		$producer1 = new MessageProducer($socket);
 
 		stream_set_blocking($socket, FALSE);
 
-		$producer1 = new MessageProducer($socket);
-		$producer1->subscribe(1);
+		$authMessage = new \SeanMorris\SubSpace\Message('auth ' . (string) new \SeanMorris\SubSpace\JwtToken([
+			'time'  => microtime(TRUE)
+			, 'uid' => -1
+		]), 1 );
 
-		$multiple  = new MultipleIterator(MultipleIterator::MIT_NEED_ANY | MultipleIterator::MIT_KEYS_NUMERIC);
+		$producer1->send($authMessage->encode());
 
-		$multiple->attachIterator($producer1);
+		$motdMessage = new \SeanMorris\SubSpace\Message('motd', 1);
 
-		foreach($multiple as $key => $messages)
+		$producer1->send($motdMessage->encode());
+
+		$motdMessage = new \SeanMorris\SubSpace\Message('random', 1);
+
+		$producer1->send($motdMessage->encode());
+
+		$subMessage = new \SeanMorris\SubSpace\Message('sub ' . $channel, 1);
+
+		$producer1->send($subMessage->encode());
+
+		$subMessage = new \SeanMorris\SubSpace\Message('sub 0', 1);
+
+		$producer1->send($subMessage->encode());
+
+		while($producer1)
 		{
-			if($key === NULL)
+			if($messsge = $producer1->check())
 			{
-				continue;
-			}
+				if($messsge->type() === 1)
+				{
+					try
+					{
+						$content = json_decode($messsge->content());
+					}
+					catch(\Exception $e)
+					{
+						echo "Unexpected error.\n";
+					}
 
-			if(!$messages = array_filter($messages))
-			{
-				continue;
-			}
+					if(is_object($content))
+					{
+						print_r($content);
+					}
+					else
+					{
+						echo $content;
+					}
 
-			var_dump($messages);
+				}
+				else if($messsge->type() === 2)
+				{
+					$bytes = $messsge->content();
+
+					if(ord($bytes[0]) === 0)
+					{
+						$header  = substr($bytes, 4, 2);
+						$content = substr($bytes, 6);
+
+						echo '0x' . implode(NULL, array_map(
+							function($x) { return str_pad(ord($x),2,0,STR_PAD_LEFT); }
+							, str_split($header))
+						);
+
+						echo ' ';
+					}
+					else if(ord($bytes[0]) === 1)
+					{
+						$header  = substr($bytes, 1, 4);
+						$content = substr($bytes, 6);
+
+						echo '0x' . implode(NULL, array_map(
+							function($x) { return str_pad(ord($x),2,0,STR_PAD_LEFT); }
+							, str_split($header))
+						);
+
+						echo ' ';
+					}
+
+					for($i = 0; $i < strlen($content); $i++)
+					{
+						echo dechex(ord($content[$i]));
+
+						echo ' ';
+					}
+				}
+
+				echo PHP_EOL;
+			}
 		}
+
+		// $multiple  = new MultipleIterator(MultipleIterator::MIT_NEED_ANY | MultipleIterator::MIT_KEYS_NUMERIC);
+
+		// $multiple->attachIterator($producer1);
+
+		// foreach($multiple as $key => $messages)
+		// {
+		// 	if($key === NULL)
+		// 	{
+		// 		continue;
+		// 	}
+
+		// 	if(!$messages = array_filter($messages))
+		// 	{
+		// 		continue;
+		// 	}
+
+		// 	var_dump($messages);
+		// }
 	}
 
 	public function klpub($router)
@@ -135,8 +217,8 @@ class RootRoute implements \SeanMorris\Ids\Routable
 			));
 		}
 
-		stream_set_write_buffer($socket, 0);
-		stream_set_read_buffer($socket, 0);
+		// stream_set_write_buffer($socket, 0);
+		// stream_set_read_buffer($socket, 0);
 
 		fwrite($socket
 			, "GET / HTTP/1.1"    ."\r\n".
@@ -149,22 +231,34 @@ class RootRoute implements \SeanMorris\Ids\Routable
 
 	    echo fread($socket, 1024);
 
-		$send = new \SeanMorris\SubSpace\Message();
+	    $producer1 = new MessageProducer($socket);
 
-		fwrite($socket, $send->encode('auth ' . (string) new \SeanMorris\SubSpace\JwtToken([
+	    $authMessage = new \SeanMorris\SubSpace\Message('auth ' . (string) new \SeanMorris\SubSpace\JwtToken([
 			'time'  => microtime(TRUE)
 			, 'uid' => -1
-		])));
+		]), 1 );
 
-		$recv = new \SeanMorris\SubSpace\Message();
+		$producer1->send($authMessage->encode());
 
 		while($input = fgets(STDIN))
 		{
-			$send = new \SeanMorris\SubSpace\Message();
-			fwrite($socket, $send->encode(implode(' ', ['pub', $channel, $input])));
+			$input = trim($input);
+
+			var_dump('pub ' . $channel . ' ' . $input);
+
+			$inputMessage = new \SeanMorris\SubSpace\Message(
+				'pub ' . $channel . ' ' . $input
+				, 1
+			);
+
+			$producer1->send($inputMessage->encode());
+
+			fflush($socket);
+
+			usleep(500);
 		}
 
-		fclose($socket);
+		// fclose($socket);
 	}
 
 	public function klsub($router)
@@ -242,4 +336,23 @@ class RootRoute implements \SeanMorris\Ids\Routable
 			}
 		}
 	}
+
+	// public function mempass()
+	// {
+	// 	$clientProcess = new \SeanMorris\SubSpace\ClientProcess(STDIN);
+
+	// 	$clientProcess->fork();
+
+	// 	$wrote = 0;
+
+	// 	while($line = fread($clientProcess->proxy, 32))
+	// 	{
+	// 		print $line;
+	// 	}
+
+	// 	sleep(2);
+	// 	$clientProcess->done();
+	// 	sleep(2);
+	// 	$clientProcess->wait();
+	// }
 }

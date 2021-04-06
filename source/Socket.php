@@ -20,14 +20,19 @@ class Socket
 		, $partials
 		, $index       = 0
 		, $producers   = []
+		, $processes   = []
+		, $sockets     = []
 		, $userContext = []
 		, $crypto      = false
 		, $agents      = []
 		, $hub         = NULL
+		, $threaded    = false
 	;
 
-	public function __construct()
+	public function __construct($options = [])
 	{
+		$options = (object) $options;
+
 		$this->hub = new static::$Hub;
 
 		$socketSettings = \SeanMorris\Ids\Settings::read('websocket');
@@ -36,7 +41,9 @@ class Socket
 		$certFile   = NULL;
 		$keyFile    = NULL;
 		$keyPath    = NULL;
-		$address    = 'localhost:9998';
+
+		$address    = $options->address  ?? 'localhost:9998';
+		$threaded   = $options->threaded ?? false;
 
 		if($socketSettings)
 		{
@@ -82,56 +89,58 @@ class Socket
 
 	public function tick()
 	{
-		if($newProducers = $this->checkForNewUsers())
+		$this->checkForNewClients();
+
+		if($this->sockets)
 		{
-			foreach($newProducers as $producer)
+			$sockets = $this->sockets;
+			$empty = [];
+
+			stream_select($sockets, $empty, $empty, 0);
+
+			$sockets = array_values($sockets);
+
+			$dead = [];
+
+			$socketCount = count($sockets);
+
+			foreach($sockets as $socket)
 			{
-				$this->producers[ ++$this->index ] = $producer;
+				$socketId = (int) $socket;
 
-				$this->onConnect($producer, $this->index);
+				$producer = $this->producers[ $socketId ];
+
+				if($producer->done())
+				{
+					$dead[] = $producer;
+				}
+
+				if($message = $producer->check())
+				{
+					\SeanMorris\Ids\Log::debug($message->__debugInfo());
+
+					$this->onReceive(
+						$message->type()
+						, $message->content()
+						, $producer
+					);
+
+					continue;
+				}
 			}
-		}
 
-		$dead = [];
-
-		foreach($this->producers as $i => $producer)
-		{
-			if(!$producer)
+			foreach($dead as $producer)
 			{
-				continue;
+				$this->onDisconnect($producer);
+
+				$this->cleanupDeadClient($producer);
 			}
-
-			if($producer->done())
-			{
-				$dead[$i] = $producer;
-			}
-
-			if($message = $producer->check())
-			{
-				\SeanMorris\Ids\Log::debug($message->__debugInfo());
-
-				$this->onReceive(
-					$message->type()
-					, $message->content()
-					, $producer
-					, $i
-				);
-
-				continue;
-			}
-		}
-
-		foreach($dead as $i => $producer)
-		{
-			$this->onDisconnect($producer, $i);
-
-			$this->cleanupDeadClient($producer, $i);
 		}
 
 		$this->hub->tick();
 	}
 
-	protected function checkForNewUsers()
+	protected function checkForNewClients()
 	{
 		$producers = [];
 
@@ -168,9 +177,30 @@ class Socket
 						. "\r\n\r\n"
 				);
 
-				$producer = new static::$Producer($newSocket);
+				++$this->index;
 
-				array_push($producers, $producer);
+				$clientSocket = $newSocket;
+
+				if($this->threaded)
+				{
+					$process = new \SeanMorris\SubSpace\ClientProcess($clientSocket);
+					$clientSocket = $process->proxy;
+					$process->fork();
+				}
+
+				$producer = new static::$Producer($clientSocket, $this->index);
+
+				$socketId = $producer->socketId();
+
+				$this->producers[ $socketId ] = $producer;
+
+				$this->sockets[ $socketId ] = $clientSocket;
+
+				if($this->threaded)
+				{
+					$this->processes[ $socketId ] = $process;
+				}
+
 			}
 			else
 			{
@@ -178,51 +208,70 @@ class Socket
 			}
 		}
 
-		return $producers;
+		foreach($producers as $producer)
+		{
+			$this->onConnect($producer, $producer->id());
+		}
 	}
 
-	protected function cleanupDeadClient($client, $clientIndex)
+	protected function cleanupDeadClient($client)
 	{
-		if(!isset($this->agents[ $clientIndex ]))
+		$socketId = $client->socketId();
+
+		if(!isset($this->agents[ $socketId ]))
 		{
 			return;
 		}
 
-		$this->hub->unsubscribe('*', $this->agents[ $clientIndex ]);
+		$this->hub->unsubscribe('*', $this->agents[ $socketId ]);
 
-		unset($this->userContext[ $clientIndex ]);
-		unset($this->producers[ $clientIndex ]);
-		unset($this->agents[ $clientIndex]);
+		unset(
+			$this->sockets[ $socketId ]
+			, $this->userContext[ $socketId ]
+			, $this->producers[ $socketId ]
+			, $this->agents[ $socketId ]
+		);
+
+		if($this->processes)
+		{
+			$this->processes[ $socketId ]->done();
+
+			unset($this->processes[ $socketId ]);
+		}
 	}
 
-	protected function onConnect($client, $clientIndex)
+	protected function onConnect($client)
 	{
-		\SeanMorris\Ids\Log::debug(sprintf("#%d joined.\n", $clientIndex));
+		\SeanMorris\Ids\Log::debug(sprintf("#%d joined.\n", $client->id()));
 	}
 
-	protected function onDisconnect($client, $clientIndex)
+	protected function onDisconnect($client)
 	{
-		\SeanMorris\Ids\Log::debug(sprintf("#%d left.\n", $clientIndex));
+		\SeanMorris\Ids\Log::debug(sprintf("#%d left.\n", $client->id()));
 	}
 
-	protected function onReceive($type, $message, $client, $clientIndex)
+	protected function onReceive($type, $message, $client)
 	{
 		$response = NULL;
 
-		if(!isset($this->agents[$clientIndex]))
+		$clientId = $client->id();
+		$socketId = $client->socketId();
+
+		if(!isset($this->agents[$socketId]))
 		{
-			$this->agents[$clientIndex] = new \SeanMorris\Kallisti\Agent;
+			$this->agents[$socketId] = new \SeanMorris\Kallisti\Agent;
 		}
 
-		$agent = $this->agents[$clientIndex];
+		$agent = $this->agents[$socketId];
 
-		if(!isset($this->userContext[$clientIndex]))
+		if(!isset($this->userContext[$socketId]))
 		{
 			$agent->register($this->hub);
 
 			$this->hub->unsubscribe('*', $agent);
 
-			$agent->expose(function($content, $output, $origin, $channel, $originalChannel, $cc = NULL) use($client, $clientIndex){
+			$agent->expose(function($content, $output, $origin, $channel, $originalChannel, $cc = NULL) use($client, $clientId){
+
 
 				if($content === NULL)
 				{
@@ -239,14 +288,14 @@ class Socket
 
 				\SeanMorris\Ids\Log::debug(sprintf(
 					"<< %d: { %s bytes } \n"
-					, $clientIndex
+					, $clientId
 					, strlen($syndicated->encoded())
 				));
 
 				if($client->done())
 				{
-					$this->cleanupDeadClient($client, $clientIndex);
-					$this->onDisconnect($client, $clientIndex);
+					$this->cleanupDeadClient($client);
+					$this->onDisconnect($client);
 
 					return;
 				}
@@ -259,13 +308,13 @@ class Socket
 				{
 					\SeanMorris\Ids\Log::error($exception->getMessage());
 
-					$this->onDisconnect($client, $clientIndex);
+					$this->onDisconnect($client);
 
-					$this->cleanupDeadClient($client, $clientIndex);
+					$this->cleanupDeadClient($client);
 				}
 			});
 
-			$this->userContext[$clientIndex] = [
+			$this->userContext[$socketId] = [
 				'__client'   => $client
 				, '__hub'    => $this->hub
 				, '__agent'  => $agent
@@ -281,8 +330,8 @@ class Socket
 		{
 			case(static::$Message::TYPE['BINARY']):
 
-				if(isset($this->userContext[$clientIndex])
-					&& $this->userContext[$clientIndex]['__authed']
+				if(isset($this->userContext[$socketId])
+					&& $this->userContext[$socketId]['__authed']
 				){
 					$channelId = ord($message[0]) + (ord($message[1]) << 8);
 
@@ -302,7 +351,7 @@ class Socket
 
 				\SeanMorris\Ids\Log::debug(sprintf(
 					">> %d[%d]: \"%s\"\n"
-					, $clientIndex
+					, $clientId
 					, $type
 					, $message
 				));
@@ -319,7 +368,7 @@ class Socket
 				$request = new \SeanMorris\Ids\Request(['path' => $path]);
 				$router  = new \SeanMorris\Ids\Router($request, $routes);
 
-				$router->setContext($this->userContext[$clientIndex]);
+				$router->setContext($this->userContext[$socketId]);
 				$response = $router->route();
 
 				if($response instanceof \SeanMorris\Theme\View)
@@ -329,7 +378,7 @@ class Socket
 
 				\SeanMorris\Ids\Log::debug(sprintf(
 					"<< %d[%d]: \"%s\"\n"
-					, $clientIndex
+					, $clientId
 					, $type
 					, print_r($response, 1)
 				));
