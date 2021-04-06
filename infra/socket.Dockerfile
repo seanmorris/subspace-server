@@ -1,4 +1,4 @@
-FROM php:7.2-apache
+FROM php:7.4-apache
 MAINTAINER Sean Morris <sean@seanmorr.is>
 
 RUN rm -rfv /var/www/html && ln -s /app/public /var/www/html

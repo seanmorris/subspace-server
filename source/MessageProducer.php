@@ -60,12 +60,28 @@ class MessageProducer implements \Iterator
 		return $this->done;
 	}
 
-
 	public function send($raw, $type = NULL)
 	{
 		stream_set_blocking($this->socket, TRUE);
-		fwrite($this->socket, $raw);
-		stream_set_blocking($this->socket, FALSE);
+
+		if($this->done)
+		{
+			\SeanMorris\Ids\Log::warn('Writing to disconnected client!');
+			return;
+		}
+
+		$wrote = fwrite($this->socket, $raw);
+
+		if($wrote === FALSE)
+		{
+			$this->done = true;
+		}
+		else
+		{
+			fflush($this->socket);
+			stream_set_blocking($this->socket, FALSE);
+		}
+
 	}
 
 	public function name()
@@ -77,6 +93,7 @@ class MessageProducer implements \Iterator
 	{
 		return $this->check();
 	}
+
 	public function key()   { return $this->index; }
 	public function valid() { return $this->done; }
 	public function rewind(){}

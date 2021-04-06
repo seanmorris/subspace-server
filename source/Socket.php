@@ -18,6 +18,7 @@ class Socket
 	protected
 		$socket
 		, $partials
+		, $index       = 0
 		, $producers   = []
 		, $userContext = []
 		, $crypto      = false
@@ -81,6 +82,59 @@ class Socket
 
 	public function tick()
 	{
+		if($newProducers = $this->checkForNewUsers())
+		{
+			foreach($newProducers as $producer)
+			{
+				$this->producers[ ++$this->index ] = $producer;
+
+				$this->onConnect($producer, $this->index);
+			}
+		}
+
+		$dead = [];
+
+		foreach($this->producers as $i => $producer)
+		{
+			if(!$producer)
+			{
+				continue;
+			}
+
+			if($producer->done())
+			{
+				$dead[$i] = $producer;
+			}
+
+			if($message = $producer->check())
+			{
+				\SeanMorris\Ids\Log::debug($message->__debugInfo());
+
+				$this->onReceive(
+					$message->type()
+					, $message->content()
+					, $producer
+					, $i
+				);
+
+				continue;
+			}
+		}
+
+		foreach($dead as $i => $producer)
+		{
+			$this->onDisconnect($producer, $i);
+
+			$this->cleanupDeadClient($producer, $i);
+		}
+
+		$this->hub->tick();
+	}
+
+	protected function checkForNewUsers()
+	{
+		$producers = [];
+
 		if($newSocket = stream_socket_accept($this->socket, 0))
 		{
 			stream_set_blocking($newSocket, TRUE);
@@ -115,11 +169,8 @@ class Socket
 				);
 
 				$producer = new static::$Producer($newSocket);
-				$pIndex   = count($this->producers);
 
-				$this->producers[$pIndex] = $producer;
-
-				$this->onConnect($producer, $pIndex);
+				array_push($producers, $producer);
 			}
 			else
 			{
@@ -127,31 +178,21 @@ class Socket
 			}
 		}
 
-		foreach($this->producers as $i => $producer)
+		return $producers;
+	}
+
+	protected function cleanupDeadClient($client, $clientIndex)
+	{
+		if(!isset($this->agents[ $clientIndex ]))
 		{
-			if(!$producer || $producer->done())
-			{
-				continue;
-			}
-
-			if($message = $producer->check())
-			{
-				\SeanMorris\Ids\Log::debug($message->__debugInfo());
-
-				$this->onReceive(
-					$message->type()
-					, $message->content()
-					, $producer
-					, $i
-				);
-
-				continue;
-			}
+			return;
 		}
 
-		$this->hub->tick();
+		$this->hub->unsubscribe('*', $this->agents[ $clientIndex ]);
 
-		return;
+		unset($this->userContext[ $clientIndex ]);
+		unset($this->producers[ $clientIndex ]);
+		unset($this->agents[ $clientIndex]);
 	}
 
 	protected function onConnect($client, $clientIndex)
@@ -196,18 +237,19 @@ class Socket
 					, $cc
 				);
 
-				// $encoded = $syndicated->encode(
-				// 	$content
-				// 	, is_numeric($channel->name)
-				// 		? static::$Message::TYPE['BINARY']
-				// 		: static::$Message::TYPE['TEXT']
-				// );
-
 				\SeanMorris\Ids\Log::debug(sprintf(
 					"<< %d: { %s bytes } \n"
 					, $clientIndex
 					, strlen($syndicated->encoded())
 				));
+
+				if($client->done())
+				{
+					$this->cleanupDeadClient($client, $clientIndex);
+					$this->onDisconnect($client, $clientIndex);
+
+					return;
+				}
 
 				try
 				{
@@ -217,7 +259,9 @@ class Socket
 				{
 					\SeanMorris\Ids\Log::error($exception->getMessage());
 
-					unset($this->producers[$clientIndex]);
+					$this->onDisconnect($client, $clientIndex);
+
+					$this->cleanupDeadClient($client, $clientIndex);
 				}
 			});
 
@@ -312,7 +356,7 @@ class Socket
 
 $errorHandler = set_error_handler(
 	function($errCode, $message, $file, $line, $context) use(&$errorHandler) {
-		if(substr($message, -9) == 'timed out')
+		if(substr($message, -9) == 'timed out' || substr($message, -11) ==  'Broken pipe')
 		{
 			return;
 		}
