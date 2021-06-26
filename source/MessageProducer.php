@@ -5,19 +5,23 @@ class MessageProducer implements \Iterator
 {
 	static $Message = Message::Class;
 
-	protected $id, $count, $socket, $done, $current;
+	protected $id, $count, $socket, $done, $current, $maxMessageSize;
 
 	public function __construct($socket, $id)
 	{
-		$this->id      = $id;
-		$this->socket  = $socket;
-		$this->count   = 0;
-		$this->done    = false;
-		$this->current = new static::$Message(null, null, $this->count);
-
-		$this->socketId = (int) $socket;
-
+		$this->id        = $id;
+		$this->socket    = $socket;
+		$this->count     = 0;
+		$this->done      = false;
+		$this->current   = new static::$Message(null, null, $this->count);
+		$this->settings  = \SeanMorris\Ids\Settings::read('subspace');
+		$this->socketId  = (int) $socket;
 		$this->leftovers = '';
+
+		if($this->settings->messageSizeMax)
+		{
+			$this->maxMessageSize = $this->settings->messageSizeMax;
+		}
 	}
 
 	public function check()
@@ -39,6 +43,32 @@ class MessageProducer implements \Iterator
 		try
 		{
 			$this->current->decode($chunk);
+
+			if($this->maxMessageSize && $this->current->length() > $this->maxMessageSize)
+			{
+				throw new \LengthException('Message exceeds maximum length.');
+			}
+		}
+		catch(\LengthException $error)
+		{
+			$message = new static::$Message;
+
+			$encoded = $message->encode(
+				json_encode(['error' => $error->getMessage()])
+				, static::$Message::TYPE['TEXT']
+			);
+
+			$this->send($encoded);
+
+			\SeanMorris\Ids\Log::logException($error);
+
+			$this->current = null;
+
+			$this->done = true;
+
+			fclose($this->socket);
+
+			return;
 		}
 		catch(\Exception $error)
 		{
@@ -74,6 +104,11 @@ class MessageProducer implements \Iterator
 		}
 	}
 
+	public function hanging()
+	{
+		return !!$this->leftovers;
+	}
+
 	public function done()
 	{
 		return $this->done;
@@ -105,7 +140,7 @@ class MessageProducer implements \Iterator
 		}
 		else
 		{
-			// fflush($this->socket);
+			fflush($this->socket);
 		}
 	}
 
@@ -116,7 +151,7 @@ class MessageProducer implements \Iterator
 
 	public function current()
 	{
-		return $this->check();
+		return $this->current;
 	}
 
 	public function key()   { return $this->count; }

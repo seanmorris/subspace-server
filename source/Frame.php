@@ -472,4 +472,9 @@ class Frame
 	{
 		return $this->leftover;
 	}
+
+	public function length()
+	{
+		return $this->length;
+	}
 }

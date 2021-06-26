@@ -17,8 +17,12 @@ class RootRoute implements \SeanMorris\Ids\Routable
 
 	public function server()
 	{
+		if(!file_exists('/tmp/kallisti/'))
+		{
+			mkdir('/tmp/kallisti/');
+		}
 		// $socket = new \SeanMorris\SubSpace\SocketServer;
-		$socket = new \SeanMorris\SubSpace\Socket;
+		$socket = new \SeanMorris\SubSpace\WebSocketServer;
 
 		while(true)
 		{
@@ -231,7 +235,7 @@ class RootRoute implements \SeanMorris\Ids\Routable
 
 	    echo fread($socket, 1024);
 
-	    $producer1 = new MessageProducer($socket);
+	    $producer1 = new MessageProducer($socket, 0);
 
 	    $authMessage = new \SeanMorris\SubSpace\Message('auth ' . (string) new \SeanMorris\SubSpace\JwtToken([
 			'time'  => microtime(TRUE)
@@ -242,9 +246,8 @@ class RootRoute implements \SeanMorris\Ids\Routable
 
 		while($input = fgets(STDIN))
 		{
-			$input = trim($input);
-
-			var_dump('pub ' . $channel . ' ' . $input);
+			// $input = trim($input);
+			$input = rtrim($input);
 
 			$inputMessage = new \SeanMorris\SubSpace\Message(
 				'pub ' . $channel . ' ' . $input
@@ -259,6 +262,169 @@ class RootRoute implements \SeanMorris\Ids\Routable
 		}
 
 		// fclose($socket);
+	}
+
+	public function klwrite($router)
+	{
+		$args     = $router->path()->consumeNodes();
+		$defaults = ['localhost:9998', 0];
+
+		[$hostname, $channel] = $args + $defaults;
+
+		$server   = 'tcp://' . $hostname;
+		$errno    = 0;
+		$error    = '';
+		$timeout  = 1;
+		$flags    = STREAM_CLIENT_CONNECT;
+
+		$socket = stream_socket_client($server, $errno, $error, $timeout, $flags);
+
+		if(!$socket)
+		{
+			throw new \Exception(sprintf(
+				'Could not connect to %s. Error #%d (%s)'
+				, $errno
+				, $error
+			));
+		}
+
+		// stream_set_write_buffer($socket, 0);
+		// stream_set_read_buffer($socket, 0);
+
+		fwrite($socket
+			, "GET / HTTP/1.1"    ."\r\n".
+				"Host: " . $hostname ."\r\n".
+				"Upgrade: WebSocket"   ."\r\n".
+				"Connection: Upgrade"  ."\r\n".
+				"Sec-WebSocket-Key: "  . bin2hex(random_bytes(16)) ."\r\n".
+				"Sec-WebSocket-Version: 13" ."\r\n"."\r\n"
+	    );
+
+	    echo fread($socket, 1024);
+
+	    $producer1 = new MessageProducer($socket, 0);
+
+	    $authMessage = new \SeanMorris\SubSpace\Message('auth ' . (string) new \SeanMorris\SubSpace\JwtToken([
+			'time'  => microtime(TRUE)
+			, 'uid' => -1
+		]), 1 );
+
+		$producer1->send($authMessage->encode());
+
+	    $read = fread($socket, 1024);
+
+		if($read)
+		{
+			echo $read . "\n";
+		}
+
+		while($input = fgets(STDIN))
+		{
+			echo 'write ' . $channel . ' ' . $input . "\n";
+
+			$input = trim($input);
+
+			$inputMessage = new \SeanMorris\SubSpace\Message(
+				'write ' . $channel . ' ' . $input
+				, 1
+			);
+
+			$producer1->send($inputMessage->encode());
+
+			fflush($socket);
+
+			usleep(500);
+
+			// $read = fread($socket, 1024);
+
+			// if($read)
+			// {
+			// 	echo $read . "\n";
+			// }
+
+		}
+	}
+
+	public function klread($router)
+	{
+		$args     = $router->path()->consumeNodes();
+		$defaults = ['localhost:9998', 0];
+
+		[$hostname, $channel] = $args + $defaults;
+
+		$server   = 'tcp://' . $hostname;
+		$errno    = 0;
+		$error    = '';
+		$timeout  = 1;
+		$flags    = STREAM_CLIENT_CONNECT;
+
+		$socket = stream_socket_client($server, $errno, $error, $timeout, $flags);
+
+		if(!$socket)
+		{
+			throw new \Exception(sprintf(
+				'Could not connect to %s. Error #%d (%s)'
+				, $errno
+				, $error
+			));
+		}
+
+		// stream_set_write_buffer($socket, 0);
+		// stream_set_read_buffer($socket, 0);
+
+		fwrite($socket
+			, "GET / HTTP/1.1"    ."\r\n".
+				"Host: " . $hostname ."\r\n".
+				"Upgrade: WebSocket"   ."\r\n".
+				"Connection: Upgrade"  ."\r\n".
+				"Sec-WebSocket-Key: "  . bin2hex(random_bytes(16)) ."\r\n".
+				"Sec-WebSocket-Version: 13" ."\r\n"."\r\n"
+	    );
+
+	    echo fread($socket, 1024);
+
+	    $producer1 = new MessageProducer($socket, 0);
+
+	    $authMessage = new \SeanMorris\SubSpace\Message('auth ' . (string) new \SeanMorris\SubSpace\JwtToken([
+			'time'  => microtime(TRUE)
+			, 'uid' => -1
+		]), 1 );
+
+		$producer1->send($authMessage->encode());
+
+	    $read = fread($socket, 1024);
+
+		if($read)
+		{
+			echo $read . "\n";
+		}
+
+		stream_set_blocking($socket, FALSE);
+
+		while($input = fgets(STDIN))
+		{
+			echo 'read ' . $channel . "\n";
+
+			$input = trim($input);
+
+			$inputMessage = new \SeanMorris\SubSpace\Message(
+				'read ' . $channel
+				, 1
+			);
+
+			$producer1->send($inputMessage->encode());
+
+			fflush($socket);
+
+			usleep(500);
+
+			$read = fread($socket, 1024);
+
+			if($read)
+			{
+				echo $read . "\n";
+			}
+		}
 	}
 
 	public function klsub($router)
@@ -336,23 +502,4 @@ class RootRoute implements \SeanMorris\Ids\Routable
 			}
 		}
 	}
-
-	// public function mempass()
-	// {
-	// 	$clientProcess = new \SeanMorris\SubSpace\ClientProcess(STDIN);
-
-	// 	$clientProcess->fork();
-
-	// 	$wrote = 0;
-
-	// 	while($line = fread($clientProcess->proxy, 32))
-	// 	{
-	// 		print $line;
-	// 	}
-
-	// 	sleep(2);
-	// 	$clientProcess->done();
-	// 	sleep(2);
-	// 	$clientProcess->wait();
-	// }
 }

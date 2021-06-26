@@ -17,4 +17,29 @@ class WebRoute implements \SeanMorris\Ids\Routable
 			, 'uid' => $uid
 		]);
 	}
+
+	public function _dynamic($router)
+	{
+		$channel = $router->path()->getNode();
+
+		$hub = new \SeanMorris\SubSpace\Kallisti\Hub;
+
+		$reader = $hub->reader($channel, TRUE);
+
+		$time = microtime(TRUE);
+
+		$allMessages = [];
+
+		if(microtime(TRUE) - $time < 0.05)
+		{
+			$messages = $reader();
+
+			if($messages)
+			{
+				array_push($allMessages, ...array_values($messages));
+			}
+		}
+
+		return json_encode($allMessages);
+	}
 }

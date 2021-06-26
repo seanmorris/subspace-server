@@ -130,6 +130,71 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	}
 
 	/**
+	 * Write a persistent message to a channel individually or by a selector.
+	 */
+	public function write($router)
+	{
+		$args  = $router->path()->consumeNodes();
+		$hub   = $router->contextGet('__hub');
+		$agent = $router->contextGet('__agent');
+
+		if(!$router->contextGet('__authed'))
+		{
+			return [
+				'error' => 'You need to auth before you can write.'
+			];
+		}
+
+		if(count($args) < 1)
+		{
+			return [
+				'error' => 'Please supply a channel selector.'
+			];
+		}
+
+		$channelName = array_shift($args);
+		$message     = implode(' ', $args);
+
+		if(class_exists('SeanMorris\Ids\Settings'))
+		{
+			$maxSize = (int) \SeanMorris\Ids\Settings::read(
+				'subspace', 'stored', 'messageSizeMax'
+			);
+
+			if(strlen($message) > $maxSize)
+			{
+				return [
+					'error' => 'Message too long.'
+				];
+			}
+
+		}
+
+		return $hub->write($channelName, $message, $agent);
+	}
+
+	/**
+	 * Read persistent messages from a channel individually or by a selector.
+	 */
+	public function read($router)
+	{
+		$args  = $router->path()->consumeNodes();
+		$agent = $router->contextGet('__agent');
+
+		if(count($args) < 1)
+		{
+			return [
+				'error' => 'Please supply a channel selector.'
+			];
+		}
+
+		$channelName = array_shift($args);
+		$message     = implode(' ', $args);
+
+		return $agent->read($channelName);
+	}
+
+	/**
 	 * Send a message to one or more users on a given channel.
 	 * say CHANNEL_ID CC_COUNT CC_USER_ID[...] BCC_COUNT BCC_USER_ID[...] Message Bytes
 	 */
@@ -341,8 +406,8 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 	public function channels($router)
 	{
 		$args = $router->path()->consumeNodes();
+		// $args = $router->path()->consumeNodes();
 		$hub  = $router->contextGet('__hub');
-		$args  = $router->path()->consumeNodes();
 
 		// unset($channels['*']);
 
@@ -363,7 +428,7 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 
 				return $channel;
 			}
-			, array_keys($hub->getChannels($args[0] ?? '*'))
+			, array_keys($hub->getChannels($args[0] ?? '*', 'publish'))
 		)];
 	}
 

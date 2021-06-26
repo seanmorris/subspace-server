@@ -16,16 +16,12 @@ class ClientProcess
 
 		$this->proxy = $this->sockets[0];
 
-		stream_set_write_buffer($this->wrappedStream, 0);
-		stream_set_read_buffer($this->wrappedStream, 0);
-
 		stream_set_write_buffer($this->sockets[0], 0);
 		stream_set_read_buffer($this->sockets[0], 0);
 
 		stream_set_write_buffer($this->sockets[1], 0);
 		stream_set_read_buffer($this->sockets[1], 0);
 
-		stream_set_blocking($this->wrappedStream, FALSE);
 		stream_set_blocking($this->sockets[1], FALSE);
 		stream_set_blocking($this->sockets[0], FALSE);
 	}

@@ -1,13 +1,12 @@
 <?php
 namespace SeanMorris\SubSpace;
 
-
 use \SeanMorris\SubSpace\Message;
 use \SeanMorris\SubSpace\MessageProducer;
 
 use \SeanMorris\SubSpace\Kallisti\Hub;
 
-class Socket
+class WebSocketServer
 {
 	protected static
 		$Producer  = MessageProducer::Class
@@ -20,6 +19,7 @@ class Socket
 		, $partials
 		, $index       = 0
 		, $producers   = []
+		, $hanging     = []
 		, $processes   = []
 		, $sockets     = []
 		, $userContext = []
@@ -35,21 +35,21 @@ class Socket
 
 		$this->hub = new static::$Hub;
 
-		$socketSettings = \SeanMorris\Ids\Settings::read('websocket');
+		$socketSettings = \SeanMorris\Ids\Settings::read('subspace');
 
+		$keyPath    = NULL;
 		$passphrase = NULL;
 		$certFile   = NULL;
 		$keyFile    = NULL;
-		$keyPath    = NULL;
 
 		$address    = $options->address  ?? 'localhost:9998';
 		$threaded   = $options->threaded ?? false;
 
 		if($socketSettings)
 		{
-			$address    = $socketSettings->listen ?? $address;
-			$keyPath    = IDS_ROOT . '/data/local/certbot/';
+			$address = $socketSettings->address ?? $address;
 
+			$keyPath    = $socketSettings->keyPath    ?? NULL;
 			$passphrase = $socketSettings->passphrase ?? NULL;
 			$certFile   = $socketSettings->certFile   ?? NULL;
 			$keyFile    = $socketSettings->keyFile    ?? NULL;
@@ -104,28 +104,27 @@ class Socket
 
 			$socketCount = count($sockets);
 
+			foreach($this->hanging as $socketId => $producer)
+			{
+				$this->checkProducer($producer, $socketId);
+
+				if($producer->done())
+				{
+					$dead[] = $producer;
+				}
+			}
+
 			foreach($sockets as $socket)
 			{
 				$socketId = (int) $socket;
 
 				$producer = $this->producers[ $socketId ];
 
+				$this->checkProducer($producer, $socketId);
+
 				if($producer->done())
 				{
 					$dead[] = $producer;
-				}
-
-				if($message = $producer->check())
-				{
-					\SeanMorris\Ids\Log::debug($message->__debugInfo());
-
-					$this->onReceive(
-						$message->type()
-						, $message->content()
-						, $producer
-					);
-
-					continue;
 				}
 			}
 
@@ -140,13 +139,33 @@ class Socket
 		$this->hub->tick();
 	}
 
+	protected function checkProducer($producer, $socketId)
+	{
+		if($message = $producer->check())
+		{
+			$this->onReceive(
+				$message->type()
+				, $message->content()
+				, $producer
+			);
+		}
+
+		if($producer->hanging())
+		{
+			$this->hanging[ $socketId ] = $producer;
+		}
+		else
+		{
+			unset($this->hanging[ $socketId ]);
+		}
+	}
+
 	protected function checkForNewClients()
 	{
 		$producers = [];
 
 		if($newSocket = stream_socket_accept($this->socket, 0))
 		{
-			stream_set_blocking($newSocket, TRUE);
 
 			if($this->crypto)
 			{
@@ -206,6 +225,10 @@ class Socket
 			{
 				stream_socket_shutdown($newSocket, STREAM_SHUT_RDWR);
 			}
+
+			stream_set_blocking($newSocket, FALSE);
+			stream_set_write_buffer($newSocket, 0);
+			stream_set_read_buffer($newSocket, 0);
 		}
 
 		foreach($producers as $producer)
@@ -229,6 +252,7 @@ class Socket
 			$this->sockets[ $socketId ]
 			, $this->userContext[ $socketId ]
 			, $this->producers[ $socketId ]
+			, $this->hanging[ $socketId ]
 			, $this->agents[ $socketId ]
 		);
 
@@ -259,7 +283,7 @@ class Socket
 
 		if(!isset($this->agents[$socketId]))
 		{
-			$this->agents[$socketId] = new \SeanMorris\Kallisti\Agent;
+			$this->agents[$socketId] = new \SeanMorris\SubSpace\Kallisti\Agent;
 		}
 
 		$agent = $this->agents[$socketId];

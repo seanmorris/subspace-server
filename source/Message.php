@@ -11,6 +11,7 @@ class Message
 	 	, $encoded  = null
 	 	, $frames   = []
 		, $typeByte = null
+		, $maxPubSize = 0
 	;
 
 	const TYPE = [
@@ -261,6 +262,16 @@ class Message
 	{
 		return $this->encoded;
 	}
+
+    public function length()
+    {
+    	$lengths = array_map(
+			function($frame) { return $frame->length(); }
+			, $this->frames
+		);
+
+		return array_sum($lengths);
+    }
 
 	public function __debugInfo()
 	{
