@@ -10,6 +10,7 @@ class Message
 		, $decoded  = null
 	 	, $encoded  = null
 	 	, $frames   = []
+		, $type     = null
 		, $typeByte = null
 		, $maxPubSize = 0
 	;
@@ -69,7 +70,7 @@ class Message
 			, $this->frames
 		);
 
-		$this->decoded = implode(NULL, $contents);
+		$this->decoded = implode('', $contents);
 
 		return $this->decoded;
 	}
@@ -145,7 +146,16 @@ class Message
 
 	public static function assemble($origin, $channel, $content, $originalChannel = NULL, $cc = [])
 	{
-		if(is_numeric($channel->name) || preg_match('/^\d+-\d+$/', $channel->name))
+		if(is_numeric($channel))
+		{
+			$channelName = $channel;
+		}
+		else
+		{
+			$channelName = $channel->name;
+		}
+
+		if(is_numeric($channelName) || preg_match('/^\d+-\d+$/', $channelName))
 		{
 			$typeByte = static::TYPE['BINARY'];
 
@@ -153,7 +163,7 @@ class Message
 				'vvv'
 				, $origin ? 1 : 0
 				, $origin ? $origin->id : 0
-				, $channel->name
+				, $channelName
 			);
 
 			if(is_int($content))
@@ -193,7 +203,7 @@ class Message
 
 			if(isset($channel))
 			{
-				$message['channel'] = $channel->name;
+				$message['channel'] = $channelName;
 
 				if(isset($originalChannel) && $channel !== $originalChannel)
 				{
@@ -207,7 +217,6 @@ class Message
 			}
 
 			$outgoing = json_encode($message);
-
 		}
 
 		$static = new static;

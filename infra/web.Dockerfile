@@ -1,30 +1,28 @@
-FROM php:7.4-apache
+FROM php:8.1-apache
 MAINTAINER Sean Morris <sean@seanmorr.is>
+SHELL ["bash", "-euxo", "pipefail", "-c"]
 
-RUN rm -rfv /var/www/html \
-	&& ln -s /app/public /var/www/html \
-	&& docker-php-ext-install pdo pdo_mysql
-# RUN rm -rfv /var/www/html \
-# 	&& ln -s /app/public /var/www/html \
-# 	&& docker-php-ext-install pdo pdo_mysql bcmath
+RUN apt update;\
+	apt-get install -y --no-install-recommends\
+		libyaml-dev\
+		openssl\
+		wget;
 
-RUN a2enmod rewrite
+RUN wget http://pear.php.net/go-pear.phar;\
+	wget https://github.com/pear/pearweb_phars/blob/master/go-pear.phar?raw=true -qO- > go-pear.phar;\
+	php go-pear.phar;\
+	pecl install yaml -y;\
+	docker-php-ext-enable yaml;\
+	apt-get remove -y wget;
 
-# RUN apt update
-# RUN apt install libxml2-dev libyaml-dev -y
-# RUN docker-php-ext-install xml
-# RUN docker-php-ext-install xmlrpc
+RUN rm -rfv /var/www/html;\
+	ln -s /app/public /var/www/html;\
+	a2enmod rewrite rewrite ssl http2;\
+	docker-php-ext-install pdo pdo_mysql pcntl;
+
+COPY infra/apache-ssl.conf /etc/apache2/conf-enabled/ssl.conf
 
 # RUN apt-get install -y sendmail
-
-# RUN apt-get install wget
-# RUN wget http://pear.php.net/go-pear.phar
-# RUN wget https://github.com/pear/pearweb_phars/blob/master/go-pear.phar?raw=true -qO- > go-pear.phar
-# RUN php go-pear.phar
-
-# RUN pecl install yaml -y
-# RUN docker-php-ext-enable yaml
-
 # RUN apt-get update && \
 # 	apt-get install -y ssmtp && \
 # 	apt-get clean && \

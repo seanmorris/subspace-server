@@ -152,7 +152,7 @@ class Frame
 	{
 		\SeanMorris\Ids\Log::debug(sprintf('Decoding %d bytes.', strlen($rawBytes)));
 
-		if(strlen($this->rawFrame))
+		if(strlen($this->rawFrame ?? ''))
 		{
 			return $this->continueDecoding($rawBytes);
 		}
@@ -160,23 +160,24 @@ class Frame
 		$this->type = $this->dataType($rawBytes);
 		$this->fin  = $this->fin($rawBytes);
 
+		if($this->type === static::TYPE['PING'])
+		{
+			\SeanMorris\Ids\Log::warn('Received a PING MESSAGE!');
+		}
+		else if($this->type === static::TYPE['PONG'])
+		{
+			\SeanMorris\Ids\Log::debug('Received a PONG MESSAGE!');
+		}
+		else if($this->type === static::TYPE['CLOSE'])
+		{
+			\SeanMorris\Ids\Log::debug('Received a CLOSE MESSAGE!');
+		}
+
 		switch($this->type)
 		{
 			case(static::TYPE['PING']):
-
-				\SeanMorris\Ids\Log::debug('Type', 'Received a PING!');
-				break;
-
 			case(static::TYPE['PONG']):
-
-				\SeanMorris\Ids\Log::debug('Type', 'Received a PONG!');
-				break;
-
 			case(static::TYPE['CLOSE']):
-
-				\SeanMorris\Ids\Log::debug('Type', 'Received a CLOSE MESSAGE!');
-				break;
-
 			case(static::TYPE['TEXT']):
 			case(static::TYPE['BINARY']):
 			case(static::TYPE['CONTINUE']):
@@ -257,7 +258,7 @@ class Frame
 
 				\SeanMorris\Ids\Log::debug(sprintf(
 					'Stashing %d bytes for next frame.'
-					, strlen($this->leftover)
+					, strlen($this->leftover ?? '')
 				));
 
 				if(!$this->fin)
@@ -391,7 +392,7 @@ class Frame
 
 	public function isDone()
 	{
-		$currentLength = strlen($this->decoded);
+		$currentLength = strlen($this->decoded ?? '');
 		$fullLength    = $this->length;
 
 		return $currentLength >= $fullLength;

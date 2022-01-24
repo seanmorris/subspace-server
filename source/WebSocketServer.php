@@ -17,6 +17,9 @@ class WebSocketServer
 	protected
 		$socket
 		, $partials
+		, $intervalId  = 0
+		, $lastTick    = 0
+		, $lastBeat    = 0
 		, $index       = 0
 		, $producers   = []
 		, $hanging     = []
@@ -27,6 +30,8 @@ class WebSocketServer
 		, $agents      = []
 		, $hub         = NULL
 		, $threaded    = false
+		, $deepSleep   = false
+		, $dozeCount   = 0
 	;
 
 	public function __construct($options = [])
@@ -35,24 +40,29 @@ class WebSocketServer
 
 		$this->hub = new static::$Hub;
 
-		$socketSettings = \SeanMorris\Ids\Settings::read('subspace');
+		$this->settings = \SeanMorris\Ids\Settings::read('subspace');
 
 		$keyPath    = NULL;
 		$passphrase = NULL;
 		$certFile   = NULL;
 		$keyFile    = NULL;
 
-		$address    = $options->address  ?? 'localhost:9998';
-		$threaded   = $options->threaded ?? false;
+		$address = $options->address
+			?? $this->settings->address
+			?:'localhost:9998';
 
-		if($socketSettings)
+		$threaded = $options->threaded
+			?? $this->settings->threaded
+			?: false;
+
+		if($this->settings)
 		{
-			$address = $socketSettings->address ?? $address;
+			$address = $this->settings->address ?? $address;
 
-			$keyPath    = $socketSettings->keyPath    ?? NULL;
-			$passphrase = $socketSettings->passphrase ?? NULL;
-			$certFile   = $socketSettings->certFile   ?? NULL;
-			$keyFile    = $socketSettings->keyFile    ?? NULL;
+			$keyPath    = $this->settings->keyPath    ?: NULL;
+			$passphrase = $this->settings->passphrase ?: NULL;
+			$certFile   = $this->settings->certFile   ?: NULL;
+			$keyFile    = $this->settings->keyFile    ?: NULL;
 		}
 
 		$contextOptions = [];
@@ -89,7 +99,44 @@ class WebSocketServer
 
 	public function tick()
 	{
+		$now = 1000 * microtime(true);
+
 		$this->checkForNewClients();
+
+		$minTickInterval  = $this->settings->throttle ?? 0;
+		$lastTickInterval = round(($now - $this->lastTick) / 1000);
+		$lastBeatInterval = round(($now - $this->lastBeat));
+
+		if($this->settings->throttle && $minTickInterval > $lastTickInterval)
+		{
+			usleep($minTickInterval - $lastTickInterval);
+		}
+
+		if(!$this->sockets && $this->settings->sleep)
+		{
+			$sleepTime = $this->settings->sleep;
+
+			if($this->settings->doze && $this->dozeCount > $this->settings->doze)
+			{
+				$sleepTime = $this->settings->deepSleep;
+			}
+
+			\SeanMorris\Ids\Log::info(
+				sprintf(
+					'[%07d] No clients connected. Sleeping for %dms'
+					, $this->intervalId
+					, $sleepTime
+				)
+			);
+
+			usleep(1000 * $sleepTime);
+
+			$this->dozeCount++;
+			$this->intervalId++;
+			return;
+		}
+
+		$later = 1000 * microtime(true);
 
 		if($this->sockets)
 		{
@@ -128,7 +175,88 @@ class WebSocketServer
 				}
 			}
 
-			foreach($dead as $producer)
+			$timedout = [];
+
+			if($this->settings->netTimeout || $this->settings->idleTimeout)
+			{
+				foreach($this->sockets as $socket)
+				{
+					$socketId = (int) $socket;
+
+					$producer = $this->producers[ $socketId ];
+
+					$idleTimeout = $this->settings->idleTimeout ?? 0;
+					$netTimeout  = $this->settings->netTimeout  ?? 0;
+
+					$idleNetTime = $now + -$producer->lastNetwork();
+					$idleTime    = $now + -$producer->lastActive();
+					$pingTime    = $this->settings->netTimeout + -250;
+
+					if($netTimeout && $idleNetTime >= $netTimeout)
+					{
+						\SeanMorris\Ids\Log::info(
+							sprintf(
+								'[%07d] client id %d timed out due to %dms of inactivity.'
+								, $this->intervalId
+								, $socketId
+								, $idleTime
+							)
+						);
+
+						$timedout[] = $producer;
+
+						$producer->send(Message::enc(
+							json_encode(['error' => 'Timed out due to lack of network activity.'])
+							, Message::TYPE['TEXT']
+						));
+
+						$producer->send(Message::enc(
+							chr(0x03) . chr(0xE8)
+							, Message::TYPE['CLOSE'])
+						);
+					}
+
+					if($netTimeout && !$producer->wasPinged() && $idleNetTime >= $pingTime)
+					{
+						$producer->ping();
+
+						\SeanMorris\Ids\Log::debug(
+							sprintf(
+								'[%07d] client id %d pinged after %dms of inactivity.'
+								, $this->intervalId
+								, $socketId
+								, $idleNetTime
+							)
+						);
+					}
+
+					if($idleTimeout && $idleTime >= $idleTimeout)
+					{
+						\SeanMorris\Ids\Log::info(
+							sprintf(
+								'[%07d] client id %d timed out due to %dms of inactivity.'
+								, $this->intervalId
+								, $socketId
+								, $idleNetTime
+							)
+						);
+
+						$timedout[] = $producer;
+
+						$producer->send(Message::enc(
+							json_encode(['error' => 'Timed out due to lack of user activity.'])
+							, Message::TYPE['TEXT']
+						));
+
+						$producer->send(Message::enc(
+							chr(0x03) . chr(0xE8)
+							, Message::TYPE['CLOSE'])
+						);
+					}
+				}
+			}
+
+			foreach([...$dead, ...$timedout] as $producer)
 			{
 				$this->onDisconnect($producer);
 
@@ -137,6 +265,28 @@ class WebSocketServer
 		}
 
 		$this->hub->tick();
+
+		if($lastBeatInterval >= 15000)
+		{
+			$clientCount = count($this->sockets);
+			\SeanMorris\Ids\Log::info(
+				sprintf(
+					'[%07d] %d client%s connected, last frame duration: ~%sms'
+					, $this->intervalId
+					, $clientCount
+					, $clientCount === 1 ? '' : 's'
+					, number_format(1000 * microtime(true) - $later, 2)
+				)
+			);
+
+
+			$this->lastBeat = 1000 * microtime(true);
+		}
+
+		$this->dozeCount = 0;
+		$this->lastTick  = $now;
+
+		$this->intervalId++;
 	}
 
 	protected function checkProducer($producer, $socketId)
@@ -166,22 +316,22 @@ class WebSocketServer
 
 		if($newSocket = stream_socket_accept($this->socket, 0))
 		{
-
 			if($this->crypto)
 			{
+				stream_set_blocking($newSocket, TRUE);
 				stream_socket_enable_crypto(
 					$newSocket
 					, TRUE
-					, STREAM_CRYPTO_METHOD_SSLv23_SERVER
+					, STREAM_CRYPTO_METHOD_ANY_SERVER
 				);
 			}
 
 			$incomingHeaders = fread($newSocket, 2**16);
 
+			stream_set_blocking($newSocket, FALSE);
+
 			if(preg_match('#^Sec-WebSocket-Key: (\S+)#mi', $incomingHeaders, $match))
 			{
-				stream_set_blocking($newSocket, FALSE);
-
 				fwrite(
 					$newSocket
 					, "HTTP/1.1 101 Switching Protocols\r\n"
@@ -318,9 +468,6 @@ class WebSocketServer
 
 				if($client->done())
 				{
-					$this->cleanupDeadClient($client);
-					$this->onDisconnect($client);
-
 					return;
 				}
 
@@ -331,10 +478,6 @@ class WebSocketServer
 				catch (\Exception $exception)
 				{
 					\SeanMorris\Ids\Log::error($exception->getMessage());
-
-					$this->onDisconnect($client);
-
-					$this->cleanupDeadClient($client);
 				}
 			});
 
@@ -359,12 +502,7 @@ class WebSocketServer
 				){
 					$channelId = ord($message[0]) + (ord($message[1]) << 8);
 
-					$finalMessage = '';
-
-					for($i = 2; $i < strlen($message); $i++)
-					{
-						$finalMessage .= $message[$i];
-					}
+					$finalMessage = substr($message, 2);
 
 					$this->hub->publish($channelId, $finalMessage, $agent);
 				}
@@ -428,7 +566,7 @@ class WebSocketServer
 }
 
 $errorHandler = set_error_handler(
-	function($errCode, $message, $file, $line, $context) use(&$errorHandler) {
+	function($errCode, $message, $file, $line, $context = []) use(&$errorHandler) {
 		if(substr($message, -9) == 'timed out' || substr($message, -11) ==  'Broken pipe')
 		{
 			return;

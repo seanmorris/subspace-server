@@ -1,3 +1,7 @@
+#!make
+
+-include ./keys.make
+
 build:
 	cd infra/ \
 	&& docker-compose build

@@ -5,23 +5,40 @@ class MessageProducer implements \Iterator
 {
 	static $Message = Message::Class;
 
-	protected $id, $count, $socket, $done, $current, $maxMessageSize;
+	protected $id, $count, $socket, $done, $current, $maxMessageSize, $lastActive, $pinged = false;
 
 	public function __construct($socket, $id)
 	{
-		$this->id        = $id;
-		$this->socket    = $socket;
-		$this->count     = 0;
-		$this->done      = false;
-		$this->current   = new static::$Message(null, null, $this->count);
-		$this->settings  = \SeanMorris\Ids\Settings::read('subspace');
-		$this->socketId  = (int) $socket;
-		$this->leftovers = '';
+		$this->id          = $id;
+		$this->socket      = $socket;
+		$this->count       = 0;
+		$this->done        = false;
+		$this->pinged      = false;
+		$this->lastActive  = 1000 * microtime(true);
+		$this->lastNetwork = 1000 * microtime(true);
+		$this->current     = new static::$Message(null, null, $this->count);
+		$this->settings    = \SeanMorris\Ids\Settings::read('subspace');
+		$this->socketId    = (int) $socket;
+		$this->leftovers   = '';
 
 		if($this->settings->messageSizeMax)
 		{
-			$this->maxMessageSize = $this->settings->messageSizeMax;
+			$this->messageSizeMax = $this->settings->messageSizeMax;
 		}
+	}
+
+	public function ping($message = NULL)
+	{
+		$message = $message ?? 'ping-' . uniqid();
+
+		$this->send(Message::enc($message, Message::TYPE['PING']));
+
+		$this->pinged = TRUE;
+	}
+
+	public function wasPinged($message = NULL)
+	{
+		return $this->pinged;
 	}
 
 	public function check()
@@ -34,6 +51,7 @@ class MessageProducer implements \Iterator
 
 			$this->leftovers = NULL;
 		}
+
 
 		if(!strlen($chunk))
 		{
@@ -89,11 +107,21 @@ class MessageProducer implements \Iterator
 		{
 			$current = $this->current;
 
+			if($current->type() === static::$Message::TYPE['PONG'])
+			{
+				$this->lastNetwork = 1000 * microtime(true);
+				$this->pinged = FALSE;
+			}
+			else
+			{
+				$this->lastNetwork = $this->lastActive = 1000 * microtime(true);
+			}
+
 			$this->leftovers = $current->leftover();
 
 			\SeanMorris\Ids\Log::debug(sprintf(
 				'Carrying %d leftover bytes...'
-				, strlen($this->leftovers))
+				, strlen($this->leftovers ?? ''))
 			);
 
 			$this->count++;
@@ -144,18 +172,33 @@ class MessageProducer implements \Iterator
 		}
 	}
 
+	public function lastActive()
+	{
+		return $this->lastActive;
+	}
+
+	public function lastNetwork()
+	{
+		return $this->lastNetwork;
+	}
+
 	public function name()
 	{
 		return stream_socket_get_name($this->socket, TRUE);
 	}
 
+	#[\ReturnTypeWillChange]
 	public function current()
 	{
 		return $this->current;
 	}
 
+	#[\ReturnTypeWillChange]
 	public function key()   { return $this->count; }
+	#[\ReturnTypeWillChange]
 	public function valid() { return !$this->done; }
+	#[\ReturnTypeWillChange]
 	public function next()  { return $this->check(); }
+	#[\ReturnTypeWillChange]
 	public function rewind(){}
 }

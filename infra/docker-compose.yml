@@ -2,7 +2,7 @@ version: '3'
 
 services:
 
-  is.seanmorr.subspace.socket:
+  subspace.socket:
     build:
       context: ../
       dockerfile: infra/socket.Dockerfile
@@ -13,7 +13,7 @@ services:
     volumes:
       - ../:/app
 
-  is.seanmorr.subspace.web:
+  subspace.web:
     build:
       context: ../
       dockerfile: infra/web.Dockerfile

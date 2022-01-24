@@ -167,7 +167,6 @@ class EntryRoute implements \SeanMorris\Ids\Routable
 					'error' => 'Message too long.'
 				];
 			}
-
 		}
 
 		return $hub->write($channelName, $message, $agent);
