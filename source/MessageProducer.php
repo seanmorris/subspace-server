@@ -168,7 +168,7 @@ class MessageProducer implements \Iterator
 		}
 		catch(\Exception $error)
 		{
-			\SeanMorris\Ids\Log::logException($error);
+			\SeanMorris\Ids\Log::warn($error->getMessage());
 		}
 
 		if($wrote === FALSE)
