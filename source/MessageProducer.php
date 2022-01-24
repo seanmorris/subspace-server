@@ -160,7 +160,16 @@ class MessageProducer implements \Iterator
 			return;
 		}
 
-		$wrote = fwrite($this->socket, $raw);
+		$wrote = FALSE;
+
+		try
+		{
+			$wrote = fwrite($this->socket, $raw);
+		}
+		catch(\Exception $error)
+		{
+			\SeanMorris\Ids\Log::logException($error);
+		}
 
 		if($wrote === FALSE)
 		{
